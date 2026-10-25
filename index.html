@@ -306,8 +306,25 @@ async function boot() {
   const bm = S.data.budget && S.data.budget.months;
   S.budget.m = bm && bm.length ? bm.length - 1 : 0;
   renderAll();
+  initHomeScreen();
   enter($('#s-home'));
   const l = $('#loader'); l.style.opacity = 0; setTimeout(() => l.remove(), 400);
+}
+
+/* ---------- Значок на главном экране телефона (Telegram 8.0+) ---------- */
+let HOME_ADDED = false;
+function canHomeScreen() {
+  try { return !!(tg && tg.addToHomeScreen && tg.isVersionAtLeast && tg.isVersionAtLeast('8.0')) && !HOME_ADDED; } catch (e) { return false; }
+}
+function initHomeScreen() {
+  if (!canHomeScreen()) return;
+  try {
+    tg.onEvent('homeScreenAdded', () => { HOME_ADDED = true; renderHome(); toast('Значок добавлен на главный экран'); haptic('ok'); });
+    tg.checkHomeScreenStatus && tg.checkHomeScreenStatus(st => { if (st === 'added') { HOME_ADDED = true; renderHome(); } });
+  } catch (e) {}
+}
+function addHome() {
+  try { tg.addToHomeScreen(); } catch (e) { toast('Телеграм не поддерживает это на этом устройстве — обновите приложение'); }
 }
 
 function enter(el) { el.classList.add('enter'); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('enter'), 900); }
@@ -407,7 +424,10 @@ function renderHome() {
         <div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:16px;font-weight:700">Наши финансы</span>
           <span style="font-size:12px" class="muted">${name ? esc(name) + ' · ' : ''}${now.getDate()} ${MONTHS_G[now.getMonth()]}</span></div>
       </div>
+      <div class="row" style="gap:8px">
+      ${canHomeScreen() ? `<button class="iconbtn" data-act="homeScreen" aria-label="Добавить на главный экран"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M12 8v6M9 11h6"/></svg></button>` : ''}
       <button class="iconbtn" data-act="refresh" aria-label="Обновить из таблицы"><svg id="ref-ic" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16"/><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8"/><path d="M21 3v5h-5M3 21v-5h5"/></svg></button>
+      </div>
     </header>
 
     <div style="display:flex;flex-direction:column;gap:6px">
@@ -1122,6 +1142,7 @@ document.addEventListener('click', e => {
     case 'homeCur': S.home.cur = v; renderHome(); haptic(); break;
     case 'wcur': S.home.wcur = v; renderHome(); haptic(); break;
     case 'refresh': refresh(); break;
+    case 'homeScreen': addHome(); break;
     case 'opsType': S.ops.type = v; S.ops.limit = 60; renderOps(); haptic(); break;
     case 'opsWho': S.ops.who = v; S.ops.limit = 60; renderOps(); haptic(); break;
     case 'more': S.ops.limit += 60; renderOps(); break;
