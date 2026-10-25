@@ -1,0 +1,969 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Наши финансы</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --bg:#0E1013;--s1:#171A1F;--s2:#1E2228;--s3:#262B33;--line:#23272E;--line2:#2A2F37;
+  --t1:#F2F4F7;--t2:#C9CFD8;--t3:#9AA3AF;
+  --acc:#7CCBF5;--acc2:#B8E4FB;--inc:#5BE3A6;--exp:#FF8A65;--lav:#A99BFF;--amb:#F5C26B;--pink:#F59BC6;
+  --safe-b:max(env(safe-area-inset-bottom),var(--tg-safe-area-inset-bottom,0px));
+  --safe-t:calc(var(--tg-safe-area-inset-top,0px) + var(--tg-content-safe-area-inset-top,0px));
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--t1);font-family:Manrope,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+body{overscroll-behavior:none}
+button,input{font-family:inherit;color:inherit}
+button{cursor:pointer}
+a{color:var(--acc)}
+.num{font-family:Unbounded,sans-serif;font-variant-numeric:tabular-nums}
+.muted{color:var(--t3)}
+.hidden{display:none!important}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+#app{max-width:520px;margin:0 auto;min-height:100vh;position:relative}
+.screen{display:none;flex-direction:column;gap:18px;padding:calc(18px + var(--safe-t)) 20px calc(120px + var(--safe-b))}
+.screen.on{display:flex}
+.screen.enter>*{animation:rise .55s cubic-bezier(.2,.8,.2,1) both}
+.screen.enter>*:nth-child(2){animation-delay:.05s}.screen.enter>*:nth-child(3){animation-delay:.1s}.screen.enter>*:nth-child(4){animation-delay:.15s}
+.screen.enter>*:nth-child(5){animation-delay:.2s}.screen.enter>*:nth-child(6){animation-delay:.25s}.screen.enter>*:nth-child(n+7){animation-delay:.3s}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes pop{0%{transform:scale(.6);opacity:0}70%{transform:scale(1.08)}100%{transform:scale(1);opacity:1}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes slide{0%,100%{transform:translateX(-5px);opacity:.5}50%{transform:translateX(5px);opacity:1}}
+
+.h1{font-family:Unbounded,sans-serif;font-weight:700;font-size:22px;margin:0}
+.row{display:flex;align-items:center;gap:10px}
+.between{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.card{background:var(--s1);border:1px solid var(--line);border-radius:24px;padding:18px;display:flex;flex-direction:column;gap:12px}
+.card-t{font-size:15px;font-weight:700}
+.link{background:none;border:0;padding:6px 0;color:var(--acc);font-size:13px;font-weight:600}
+.chips{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;margin:0 -20px;padding:0 20px}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;height:36px;padding:0 14px;border-radius:18px;border:1px solid var(--line2);background:transparent;color:var(--t2);font-size:13px;font-weight:600;transition:all .2s}
+.chip.on{background:var(--t1);color:var(--bg);border-color:var(--t1)}
+.chip.sm{height:32px;padding:0 10px;font-size:12px;font-weight:700;min-width:38px}
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px;padding:4px;background:var(--s1);border-radius:16px}
+.seg button{height:40px;border:0;border-radius:12px;background:transparent;color:var(--t2);font-size:14px;font-weight:700;transition:all .2s}
+.seg button.on{background:var(--t1);color:var(--bg)}
+.seg.soft button.on{background:var(--s3);color:var(--t1)}
+.iconbtn{width:44px;height:44px;border-radius:22px;border:1px solid var(--line2);background:var(--s1);display:flex;align-items:center;justify-content:center;flex:none}
+.bar{height:8px;border-radius:4px;background:var(--line);position:relative;overflow:hidden}
+.bar>i{position:absolute;top:0;bottom:0;left:0;width:0;border-radius:4px;transition:width .9s cubic-bezier(.2,.8,.2,1),left .9s cubic-bezier(.2,.8,.2,1)}
+.list{background:var(--s1);border-radius:20px;padding:2px 14px;display:flex;flex-direction:column}
+.item{display:flex;align-items:center;gap:12px;padding:12px 0}
+.item+.item{border-top:1px solid var(--line)}
+.ico{width:42px;height:42px;flex:none;border-radius:14px;display:flex;align-items:center;justify-content:center;font-family:Unbounded,sans-serif;font-weight:700;font-size:14px}
+.ttl{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.meta{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--t3);white-space:nowrap;overflow:hidden}
+.tag{flex:none;padding:2px 7px;border-radius:7px;font-size:10px;font-weight:700}
+.amt{font-family:Unbounded,sans-serif;font-weight:600;font-size:13px;white-space:nowrap}
+.r{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+.grow{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+
+/* nav */
+nav.tabs{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(14px + var(--safe-b));width:calc(100% - 32px);max-width:488px;height:68px;background:rgba(23,26,31,.92);border:1px solid var(--line2);border-radius:34px;display:grid;grid-template-columns:repeat(5,1fr);align-items:center;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);z-index:20}
+nav.tabs button{height:56px;background:none;border:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--t3);font-size:10px;font-weight:600}
+nav.tabs button.on{color:var(--acc);font-weight:700}
+nav.tabs .fab{width:56px;height:56px;margin:-30px auto 0;border-radius:28px;background:var(--acc);color:var(--bg);box-shadow:0 10px 30px rgba(124,203,245,.3);animation:pop .5s .3s both}
+
+/* sheets */
+.sheet{position:fixed;inset:0;background:var(--bg);z-index:40;transform:translateY(100%);visibility:hidden;transition:transform .38s cubic-bezier(.2,.8,.2,1),visibility 0s .38s;display:flex;flex-direction:column}
+.sheet.open{transform:none;visibility:visible;transition:transform .38s cubic-bezier(.2,.8,.2,1)}
+.sheet-h{padding:calc(16px + var(--safe-t)) 20px 10px;display:flex;align-items:center;justify-content:space-between;gap:10px;max-width:520px;width:100%;margin:0 auto}
+.sheet-b{flex:1;overflow-y:auto;padding:4px 20px calc(110px + var(--safe-b));display:flex;flex-direction:column;gap:20px;max-width:520px;width:100%;margin:0 auto}
+.sheet-f{position:absolute;left:0;right:0;bottom:0;padding:14px 20px calc(18px + var(--safe-b));background:linear-gradient(to top,var(--bg) 70%,rgba(14,16,19,0))}
+.sheet-f .btn{max-width:480px;margin:0 auto;display:block}
+.btn{width:100%;height:56px;border-radius:20px;border:0;background:var(--acc);color:var(--bg);font-size:16px;font-weight:700}
+.btn:disabled{opacity:.5}
+.btn.ghost{background:var(--s1);color:var(--t1);border:1px solid var(--line2);height:48px;font-size:14px}
+.lbl{font-size:13px;color:var(--t3)}
+.field{height:52px;padding:0 16px;border-radius:16px;background:var(--s1);border:1px solid var(--line2);color:var(--t1);font-size:14px;outline:none;width:100%}
+.field:focus{border-color:var(--acc)}
+.wchip{height:40px;padding:0 14px 0 6px;border-radius:20px;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;background:var(--s1);color:var(--t2);border:1px solid var(--line2);transition:all .2s}
+.wchip.on{background:var(--s3);color:var(--t1);border-color:var(--acc)}
+.cb{height:28px;min-width:28px;padding:0 6px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
+.wrap{display:flex;flex-wrap:wrap;gap:8px}
+.cat{height:38px;padding:0 14px;border-radius:19px;font-size:13px;font-weight:600;background:var(--s1);color:var(--t2);border:1px solid var(--line2);transition:all .2s}
+.sw{width:52px;height:32px;flex:none;border-radius:16px;border:0;padding:0;position:relative;background:#2F343C;transition:background .2s}
+.sw::after{content:"";position:absolute;top:4px;left:4px;width:24px;height:24px;border-radius:12px;background:var(--t1);transition:left .2s}
+.sw[aria-checked="true"]{background:var(--acc)}
+.sw[aria-checked="true"]::after{left:24px}
+.step{width:36px;height:36px;border-radius:12px;border:0;background:var(--s3);font-size:18px}
+.amount-in{background:transparent;border:0;outline:none;text-align:center;font-family:Unbounded,sans-serif;font-weight:700;font-size:44px;letter-spacing:-1px;min-width:0}
+.verdict{padding:10px 14px;border-radius:14px;font-size:13px;font-weight:600;display:flex;gap:8px;align-items:center}
+
+.toast{position:fixed;left:50%;bottom:calc(96px + var(--safe-b));transform:translate(-50%,20px);opacity:0;pointer-events:none;background:var(--t1);color:var(--bg);border-radius:16px;padding:12px 16px;font-size:14px;font-weight:600;display:flex;gap:14px;align-items:center;transition:all .3s;z-index:60;width:max-content;max-width:calc(100% - 32px)}
+.toast.on{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+.toast button{background:none;border:0;color:#0B6FA4;font-weight:700;font-size:14px;padding:4px}
+.loader{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:var(--bg);z-index:80;transition:opacity .4s}
+.loader i{width:40px;height:40px;border-radius:20px;border:3px solid var(--s3);border-top-color:var(--acc);animation:spin .9s linear infinite}
+.banner{padding:10px 14px;border-radius:14px;background:rgba(245,194,107,.12);color:var(--amb);font-size:12px;font-weight:600;line-height:1.4}
+.err{padding:12px 14px;border-radius:14px;background:rgba(255,138,101,.12);color:#FFB199;font-size:13px;line-height:1.45}
+.flow{animation:slide 2.4s ease-in-out infinite}
+.rate-row{display:flex;align-items:center;gap:10px;padding:11px 0}
+.rate-row+.rate-row{border-top:1px solid var(--line)}
+.pill{padding:3px 8px;border-radius:8px;font-size:11px;font-weight:700}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ГЛАВНАЯ -->
+  <section class="screen on" id="s-home" aria-label="Главная"></section>
+  <!-- ОПЕРАЦИИ -->
+  <section class="screen" id="s-ops" aria-label="Операции"></section>
+  <!-- БЮДЖЕТ -->
+  <section class="screen" id="s-budget" aria-label="Бюджет"></section>
+  <!-- ИЗ РФ -->
+  <section class="screen" id="s-rf" aria-label="Переводы из РФ"></section>
+
+  <nav class="tabs" aria-label="Навигация">
+    <button data-go="home" class="on"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Главная</button>
+    <button data-go="ops"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Операции</button>
+    <div><button class="fab" data-act="openAdd" aria-label="Добавить операцию"><svg aria-hidden="true" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button></div>
+    <button data-go="budget"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12A9 9 0 1 1 12 3v9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/></svg>Бюджет</button>
+    <button data-go="rf"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h14l-4-4M20 16H6l4 4"/></svg>Из РФ</button>
+  </nav>
+</div>
+
+<!-- НОВАЯ ОПЕРАЦИЯ -->
+<div class="sheet" id="sh-add" role="dialog" aria-modal="true" aria-label="Новая операция">
+  <div class="sheet-h">
+    <button class="iconbtn" data-act="closeAdd" aria-label="Закрыть"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    <span style="font-size:16px;font-weight:700">Новая операция</span>
+    <label class="row" style="height:36px;padding:0 10px;border-radius:18px;border:1px solid var(--line2);background:var(--s1);font-size:12px;font-weight:600;color:var(--t2);gap:6px">
+      <span class="sr">Дата</span>
+      <input type="date" id="a-date" style="background:none;border:0;color:var(--t2);font-size:12px;font-weight:600;outline:none;width:112px;color-scheme:dark">
+    </label>
+  </div>
+  <div class="sheet-b" id="add-body"></div>
+  <div class="sheet-f"><button class="btn" id="a-save" data-act="save">Сохранить в таблицу</button></div>
+</div>
+
+<!-- КОНВЕРТЕР -->
+<div class="sheet" id="sh-conv" role="dialog" aria-modal="true" aria-label="Конвертер валют">
+  <div class="sheet-h">
+    <button class="iconbtn" data-act="closeConv" aria-label="Закрыть"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    <span style="font-size:16px;font-weight:700">Конвертер</span>
+    <div style="width:44px"></div>
+  </div>
+  <div class="sheet-b" id="conv-body"></div>
+</div>
+
+<div class="toast" id="toast" role="status"><span id="toast-t"></span><button id="toast-b" class="hidden"></button></div>
+<div class="loader" id="loader"><i></i><span class="muted" style="font-size:13px">Загружаю таблицу…</span></div>
+
+<script>
+/* ================= НАСТРОЙКА ================= */
+const CONFIG = {
+  // Адрес веб-приложения Apps Script. Можно оставить пустым — бот сам передаёт его в ссылке (?api=…)
+  API_URL: ''
+};
+try {
+  const qApi = new URLSearchParams(location.search).get('api');
+  if (!CONFIG.API_URL && qApi && /^https:\/\/script\.google\.com\//.test(qApi)) CONFIG.API_URL = qApi;
+} catch (e) {}
+
+/* ================= БАЗА ================= */
+const tg = window.Telegram && window.Telegram.WebApp;
+const IN_TG = !!(tg && tg.initData);
+const DEMO = !CONFIG.API_URL || !IN_TG;
+const $ = (s, r) => (r || document).querySelector(s);
+const SYM = { EUR: '€', RSD: 'дин', RUB: '₽', USD: '$', AMD: '֏', TRY: '₺', GBP: '£', CHF: '₣', KZT: '₸', GEL: '₾', CNY: '¥' };
+const CUR_COL = { EUR: '#7CCBF5', RSD: '#F5C26B', RUB: '#A99BFF' };
+const GROUP_COL = ['#7CCBF5', '#5BE3A6', '#A99BFF', '#F59BC6', '#F5C26B', '#9AA3AF', '#FF8A65'];
+const MONTHS_G = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const nf = {};
+function fmt(n, d) {
+  d = d == null ? 2 : d;
+  if (n == null || !isFinite(n)) return '—';
+  const k = 'k' + d;
+  nf[k] = nf[k] || new Intl.NumberFormat('ru-RU', { minimumFractionDigits: d, maximumFractionDigits: d });
+  return nf[k].format(Math.abs(n)).replace(/ /g, ' ');
+}
+function money(n, cur, d) {
+  if (d == null) d = cur === 'EUR' || cur === 'USD' ? 2 : (Math.abs(n) % 1 ? 2 : 0);
+  return fmt(n, d) + ' ' + (SYM[cur] || cur);
+}
+function todayISO() { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); }
+function dayLabel(iso) {
+  const t = todayISO(), y = new Date(Date.now() - 864e5); y.setMinutes(y.getMinutes() - y.getTimezoneOffset());
+  const [Y, M, D] = iso.split('-').map(Number);
+  if (iso === t) return 'Сегодня, ' + D + ' ' + MONTHS_G[M - 1];
+  if (iso === y.toISOString().slice(0, 10)) return 'Вчера, ' + D + ' ' + MONTHS_G[M - 1];
+  return D + ' ' + MONTHS_G[M - 1] + (String(Y) !== t.slice(0, 4) ? ' ' + Y : '');
+}
+function haptic(type) { try { tg && tg.HapticFeedback && (type === 'ok' ? tg.HapticFeedback.notificationOccurred('success') : type === 'err' ? tg.HapticFeedback.notificationOccurred('error') : tg.HapticFeedback.selectionChanged()); } catch (e) {} }
+
+/* ================= СОСТОЯНИЕ ================= */
+const S = {
+  data: null, rates: null, me: null, screen: 'home',
+  home: { cur: 'EUR', wcur: 'all' },
+  ops: { type: 'all', who: 'all', q: '', limit: 60 },
+  budget: { m: null, open: null },
+  rf: { who: 'all', rub: 100000 },
+  conv: { amount: '100', cur: 'EUR' },
+  add: null, lastRow: null, busy: false
+};
+
+/* ================= API ================= */
+async function api(action, extra) {
+  const res = await fetch(CONFIG.API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(Object.assign({ action, initData: tg.initData }, extra || {}))
+  });
+  const j = await res.json();
+  if (!j.ok) throw new Error(j.error || 'Ошибка сервера');
+  return j;
+}
+
+async function ratesDirect() {
+  const out = { rates: { EUR: 1 }, chg: { EUR: 0 }, sources: [] };
+  await Promise.all([
+    fetch('https://open.er-api.com/v6/latest/EUR').then(r => r.json()).then(r => {
+      if (r.result === 'success') { Object.assign(out.rates, r.rates); out.sources.push('open.er-api.com'); out.date = r.time_last_update_utc; }
+    }).catch(() => {}),
+    fetch('https://www.cbr-xml-daily.ru/daily_json.js').then(r => r.json()).then(c => { out._cbr = c; }).catch(() => {})
+  ]);
+  if (out._cbr) applyCbr(out, out._cbr);
+  delete out._cbr;
+  return out;
+}
+function applyCbr(out, c) {
+  const V = c.Valute; if (!V || !V.EUR) return;
+  const e = V.EUR.Value / V.EUR.Nominal, ep = V.EUR.Previous / V.EUR.Nominal;
+  out.rates.RUB = e; out.chg.RUB = e / ep - 1;
+  out.cbr = { EUR: e, USD: V.USD ? V.USD.Value / V.USD.Nominal : null, date: c.Date };
+  Object.keys(V).forEach(k => {
+    if (k === 'EUR') return;
+    const p = V[k].Value / V[k].Nominal, pp = V[k].Previous / V[k].Nominal;
+    out.chg[k] = (e / p) / (ep / pp) - 1;
+    if (!out.rates[k]) out.rates[k] = e / p;
+  });
+  out.sources.push('ЦБ РФ');
+}
+const R = () => (S.rates && S.rates.rates) || {};
+function conv(n, from, to) {
+  const r = R();
+  if (from === to) return n;
+  if (!r[from] || !r[to]) return null;
+  return n / r[from] * r[to];
+}
+function pairChg(base, quote) {
+  const c = (S.rates && S.rates.chg) || {};
+  if (c[base] == null || c[quote] == null) return null;
+  return (1 + c[quote]) / (1 + c[base]) - 1;
+}
+
+/* ================= ЗАГРУЗКА ================= */
+async function boot() {
+  if (tg) {
+    try {
+      tg.ready(); tg.expand();
+      tg.setHeaderColor && tg.setHeaderColor('#0E1013');
+      tg.setBackgroundColor && tg.setBackgroundColor('#0E1013');
+      tg.setBottomBarColor && tg.setBottomBarColor('#0E1013');
+      tg.disableVerticalSwipes && tg.disableVerticalSwipes();
+      tg.BackButton.onClick(closeTop);
+    } catch (e) {}
+  }
+  try {
+    if (DEMO) {
+      S.data = demoData();
+      S.me = { name: 'Егор' };
+      S.rates = await ratesDirect();
+      if (!S.rates.rates.RSD) S.rates = demoRates();
+    } else {
+      const j = await api('all');
+      S.data = j; S.me = j.me; S.rates = j.rates;
+      if (!S.rates || !S.rates.rates || !S.rates.rates.RUB) { const d = await ratesDirect(); if (d.rates.RUB) S.rates = d; }
+    }
+  } catch (e) {
+    $('#loader').innerHTML = '<div style="max-width:340px;padding:24px;display:flex;flex-direction:column;gap:14px">' +
+      '<span class="h1" style="font-size:18px">Не удалось открыть таблицу</span><div class="err">' + esc(e.message) + '</div>' +
+      '<button class="btn ghost" onclick="location.reload()">Попробовать ещё раз</button></div>';
+    return;
+  }
+  const bm = S.data.budget && S.data.budget.months;
+  S.budget.m = bm && bm.length ? bm.length - 1 : 0;
+  renderAll();
+  enter($('#s-home'));
+  const l = $('#loader'); l.style.opacity = 0; setTimeout(() => l.remove(), 400);
+}
+
+function enter(el) { el.classList.add('enter'); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('enter'), 900); }
+function renderAll() { renderHome(); renderOps(); renderBudget(); renderRF(); }
+
+function go(name) {
+  if (S.screen === name) return;
+  S.screen = name;
+  document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === 's-' + name));
+  enter($('#s-' + name));
+  document.querySelectorAll('nav.tabs [data-go]').forEach(b => b.classList.toggle('on', b.dataset.go === name));
+  const map = { home: renderHome, ops: renderOps, budget: renderBudget, rf: renderRF };
+  map[name]();
+  window.scrollTo(0, 0);
+  haptic();
+}
+
+/* ================= АНИМАЦИИ ================= */
+function animate(root) {
+  root.querySelectorAll('[data-to]').forEach(el => {
+    const to = parseFloat(el.dataset.to), d = +el.dataset.d || 0, suf = el.dataset.suf || '', pre = el.dataset.pre || '';
+    const t0 = performance.now(), dur = 900;
+    (function step(t) {
+      const p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+      el.textContent = pre + fmt(to * e, d) + suf;
+      if (p < 1) requestAnimationFrame(step);
+    })(t0);
+  });
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    root.querySelectorAll('[data-w]').forEach(el => { el.style.width = el.dataset.w + '%'; if (el.dataset.l) el.style.left = el.dataset.l + '%'; });
+    root.querySelectorAll('[data-dash]').forEach(el => { el.style.strokeDasharray = el.dataset.dash; if (el.dataset.off) el.style.strokeDashoffset = el.dataset.off; });
+  }));
+}
+const cnt = (v, d, suf, pre) => `<span data-to="${v}" data-d="${d}" data-suf="${esc(suf || '')}" data-pre="${esc(pre || '')}">${pre || ''}${fmt(0, d)}${esc(suf || '')}</span>`;
+
+/* ================= ГЛАВНАЯ ================= */
+function walletEur(w) {
+  const r = R();
+  if (r[w.cur]) return w.balance / r[w.cur];
+  return w.eur || 0;
+}
+function renderHome() {
+  const D = S.data, el = $('#s-home');
+  const wallets = D.wallets || [];
+  const totalEur = wallets.reduce((a, w) => a + walletEur(w), 0);
+  const cur = S.home.cur;
+  const total = cur === 'EUR' ? totalEur : conv(totalEur, 'EUR', cur);
+  const m = D.money || {};
+  const runway = m.runway || 0;
+  const name = (S.me && S.me.name) || '';
+  const now = new Date();
+
+  let cells = '';
+  for (let i = 0; i < 12; i++) {
+    const f = Math.max(0, Math.min(1, runway - i)) * 100;
+    cells += `<div style="height:22px;border-radius:6px;background:rgba(14,16,19,.14);position:relative;overflow:hidden"><i data-w="${f}" style="position:absolute;left:0;top:0;bottom:0;width:0;background:#0E1013;transition:width .8s ${0.3 + i * 0.05}s cubic-bezier(.2,.8,.2,1)"></i></div>`;
+  }
+
+  const B = D.budget || {}, mi = (B.months || []).length - 1;
+  const spent = B.total && mi >= 0 ? B.total.fact[mi] : 0, plan = (B.total && B.total.plan) || m.budget || 0;
+  const over = spent > plan, inPart = over ? plan / spent * 100 : 100, fillW = over ? 100 : (plan ? spent / plan * 100 : 0);
+  const outside = B.outside && mi >= 0 ? B.outside.fact[mi] : 0;
+
+  const wf = S.home.wcur;
+  const curs = Array.from(new Set(wallets.map(w => w.cur)));
+  const wcards = wallets.filter(w => wf === 'all' || w.cur === wf).map(w => {
+    const c = CUR_COL[w.cur] || '#9AA3AF', e = walletEur(w);
+    return `<div style="flex:none;width:168px;height:128px;padding:14px;border-radius:20px;background:var(--s1);border:1px solid var(--line);border-top:3px solid ${c};display:flex;flex-direction:column;justify-content:space-between">
+      <div class="between"><span class="cb" style="background:${c}24;color:${c}">${esc(SYM[w.cur] || w.cur)}</span><span style="font-size:11px;font-weight:600" class="muted">${esc(w.owner)}</span></div>
+      <div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:13px;font-weight:600;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(w.name)}</span>
+      <span class="num" style="font-weight:600;font-size:17px">${cnt(w.balance, w.cur === 'EUR' ? 2 : 0, ' ' + (SYM[w.cur] || w.cur))}</span>
+      <span style="font-size:11px" class="muted">${w.cur === 'EUR' ? 'основная валюта' : '≈ ' + fmt(e, 0) + ' €'}</span></div></div>`;
+  }).join('');
+
+  const recent = (D.ops || []).slice(0, 5).map(opRow).join('');
+
+  const pairs = [['EUR', 'RSD', 1], ['EUR', 'RUB', 1], ['USD', 'RUB', 1], ['RSD', 'RUB', 100], ['EUR', 'USD', 1], ['EUR', 'AMD', 1], ['EUR', 'TRY', 1]];
+  const r = R();
+  const rateRows = pairs.filter(p => r[p[0]] && r[p[1]]).map(p => {
+    const v = r[p[1]] / r[p[0]] * p[2], ch = pairChg(p[0], p[1]);
+    const d = v >= 100 ? 2 : v >= 1 ? 2 : 4;
+    const arrow = ch == null || Math.abs(ch) < 0.00005 ? '' : ch > 0 ? '▲' : '▼';
+    const official = p[0] === 'EUR' && p[1] === 'RUB' ? '<span class="pill" style="background:rgba(169,155,255,.16);color:#C2B8FF">ЦБ</span>' : '';
+    return `<div class="rate-row"><span style="font-size:14px;font-weight:600;flex:1">${p[2]} ${esc(SYM[p[0]])} → ${esc(SYM[p[1]])} ${official}</span>
+      <span class="num" style="font-size:14px;font-weight:600">${fmt(v, d)}</span>
+      <span style="width:62px;text-align:right;font-size:12px;font-weight:700;color:${ch > 0 ? '#FFB199' : ch < 0 ? '#9BD8F7' : 'var(--t3)'}">${ch == null ? '' : arrow + ' ' + fmt(ch * 100, 2) + '%'}</span></div>`;
+  }).join('');
+
+  el.innerHTML = `
+    ${DEMO ? `<div class="banner">Демо-режим с примерными цифрами. Откройте приложение через бота — и здесь будут данные вашей таблицы.${!CONFIG.API_URL ? ' (Не указан API_URL.)' : ''}</div>` : ''}
+    <header class="between">
+      <div class="row" style="gap:12px">
+        <div class="row" style="gap:0">
+          <div style="width:40px;height:40px;border-radius:20px;background:var(--acc);color:var(--bg);display:flex;align-items:center;justify-content:center;font-family:Unbounded;font-weight:700;font-size:14px;border:2px solid var(--bg)">Е</div>
+          <div style="width:40px;height:40px;border-radius:20px;background:var(--lav);color:var(--bg);display:flex;align-items:center;justify-content:center;font-family:Unbounded;font-weight:700;font-size:14px;border:2px solid var(--bg);margin-left:-12px">Л</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:16px;font-weight:700">Наши финансы</span>
+          <span style="font-size:12px" class="muted">${name ? esc(name) + ' · ' : ''}${now.getDate()} ${MONTHS_G[now.getMonth()]}</span></div>
+      </div>
+      <button class="iconbtn" data-act="refresh" aria-label="Обновить из таблицы"><svg id="ref-ic" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16"/><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8"/><path d="M21 3v5h-5M3 21v-5h5"/></svg></button>
+    </header>
+
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <span class="lbl">Всего денег по сегодняшнему курсу</span>
+      <div class="row" style="align-items:baseline;gap:8px"><span class="num" style="font-weight:700;font-size:38px;letter-spacing:-1px">${cnt(total || 0, cur === 'EUR' ? 2 : 0)}</span>
+        <span class="num muted" style="font-weight:500;font-size:18px">${esc(SYM[cur])}</span></div>
+      ${m.totalEur ? `<span style="font-size:12px" class="muted">В таблице: ${money(m.totalEur, 'EUR')} · разница из-за курса ${fmt(Math.abs(totalEur - m.totalEur), 2)} €</span>` : ''}
+      <div class="row" style="gap:8px;margin-top:6px" role="group" aria-label="Валюта итога">
+        ${[['EUR', '€ Евро'], ['RSD', 'дин Динары'], ['RUB', '₽ Рубли']].map(x => `<button class="chip ${cur === x[0] ? 'on' : ''}" data-act="homeCur" data-v="${x[0]}">${x[1]}</button>`).join('')}
+      </div>
+    </div>
+
+    ${runway ? `<div style="background:var(--acc);color:var(--bg);border-radius:24px;padding:18px;display:flex;flex-direction:column;gap:14px">
+      <div class="between"><span style="font-size:13px;font-weight:700">На сколько хватит денег</span>
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M9 2h6"/></svg></div>
+      <div class="row" style="align-items:baseline;gap:8px"><span class="num" style="font-weight:700;font-size:34px">≈ ${cnt(runway, 1)}</span><span style="font-size:15px;font-weight:700">мес.</span></div>
+      <div role="img" aria-label="Примерно ${fmt(runway, 1)} месяца" style="display:grid;grid-template-columns:repeat(12,1fr);gap:4px">${cells}</div>
+      <span style="font-size:12px;font-weight:600;opacity:.75">Бюджет ${fmt(m.budget || 0, 0)} € + платежи в РФ ≈ ${fmt(m.rfMonthly || 0, 0)} € в месяц${m.trips ? ' · на поездки отложено ' + fmt(m.trips, 0) + ' €' : ''}</span>
+    </div>` : ''}
+
+    <div class="card">
+      <div class="between"><span class="card-t">Курсы сегодня</span><button class="link" data-act="openConv">Конвертер</button></div>
+      <div style="display:flex;flex-direction:column">${rateRows || '<span class="muted" style="font-size:13px">Курсы не загрузились</span>'}</div>
+      <span style="font-size:11px" class="muted">${esc((S.rates && S.rates.sources || []).join(' · '))}${S.rates && S.rates.table && S.rates.table.RSD ? ' · в таблице 1 € = ' + fmt(S.rates.table.RSD, 2) + ' дин (НБС)' : ''}. Изменение — за день, по ЦБ РФ.</span>
+    </div>
+
+    ${mi >= 0 ? `<div class="card">
+      <div class="between"><span class="card-t">Бюджет: ${esc(B.months[mi])}</span><button class="link" data-go="budget">По группам</button></div>
+      <div class="between" style="align-items:baseline"><span class="num" style="font-weight:700;font-size:22px">${cnt(spent, 2, ' €')}</span><span style="font-size:13px" class="muted">из ${fmt(plan, 0)} €</span></div>
+      <div class="bar" style="height:10px"><i data-w="${over ? inPart : fillW}" style="background:var(--acc)"></i>${over ? `<i data-w="${100 - inPart}" data-l="${inPart}" style="background:var(--exp);border-radius:0 4px 4px 0"></i>` : ''}</div>
+      <div class="between" style="font-size:12px"><span style="font-weight:700;color:${over ? 'var(--exp)' : 'var(--inc)'}">${over ? 'Перерасход ' + fmt(spent - plan) + ' €' : 'Осталось ' + fmt(plan - spent) + ' €'}</span>
+        ${outside ? `<span class="muted">Вне бюджета ещё ${fmt(outside)} €</span>` : ''}</div>
+    </div>` : ''}
+
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="between"><span class="card-t">Кошельки</span>
+        <div class="row" style="gap:6px" role="group" aria-label="Фильтр кошельков">
+          ${[['all', 'Все']].concat(curs.map(c => [c, SYM[c] || c])).map(x => `<button class="chip sm ${wf === x[0] ? 'on' : ''}" data-act="wcur" data-v="${x[0]}">${esc(x[1])}</button>`).join('')}
+        </div></div>
+      <div class="chips" style="gap:10px">${wcards}</div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="between"><span class="card-t">Последние операции</span><button class="link" data-go="ops">Все</button></div>
+      <div class="list">${recent || '<div class="item muted" style="font-size:13px">Пока пусто</div>'}</div>
+    </div>`;
+  animate(el);
+}
+
+/* ================= ОПЕРАЦИИ ================= */
+function cleanTitle(op) {
+  let c = (op.comment || '').replace(/\((?:есть|нет|неь)[^)]*\)/gi, '').replace(/\s{2,}/g, ' ').trim();
+  if (op.type === 'Перевод') return c || ('Перевод → ' + op.to);
+  return c || op.cat || op.type;
+}
+function hasReceipt(op) { return /есть\s*(?:\d+\s*)?чек/i.test(op.comment || ''); }
+function groupColorOf(cat) {
+  const B = S.data.budget || {};
+  for (let i = 0; i < (B.groups || []).length; i++) if (B.groups[i].cats.some(c => c.name === cat)) return GROUP_COL[i % GROUP_COL.length];
+  return '#9AA3AF';
+}
+function opEur(op) {
+  if (op.eur != null) return op.eur;
+  if (op.amount == null) return null;
+  return conv(op.amount, op.cur, 'EUR');
+}
+const WHO_TAG = { 'Егор': ['rgba(124,203,245,.16)', '#9BD8F7'], 'Лена': ['rgba(169,155,255,.18)', '#C2B8FF'], 'Общее': ['#262B33', '#C9CFD8'] };
+function opRow(op) {
+  const inc = op.type === 'Доход', mv = op.type === 'Перевод';
+  const col = inc ? '#5BE3A6' : mv ? '#7CCBF5' : groupColorOf(op.cat);
+  const wt = WHO_TAG[op.who] || WHO_TAG['Общее'];
+  const e = opEur(op);
+  const amount = op.amount == null ? '—' : (inc ? '+ ' : mv ? '' : '− ') + money(op.amount, op.cur);
+  const sub = mv && op.received ? '→ ' + money(op.received, curOfWallet(op.to)) : (op.cur !== 'EUR' && e != null ? '≈ ' + fmt(e) + ' €' : '');
+  const meta = mv ? esc(op.wallet) + ' → ' + esc(op.to) : esc(op.cat) + ' · ' + esc(op.wallet);
+  return `<div class="item"><div class="ico" style="background:${col}22;color:${col}">${mv ? '⇄' : esc((op.cat || op.type).charAt(0))}</div>
+    <div class="grow"><span class="ttl">${esc(cleanTitle(op))}</span>
+      <span class="meta"><span class="tag" style="background:${wt[0]};color:${wt[1]}">${esc(op.who || 'Общее')}</span>${meta}
+      ${hasReceipt(op) ? '<svg role="img" aria-label="Есть чек" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#5BE3A6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg>' : ''}
+      ${op.move ? '<span class="tag" style="background:rgba(245,194,107,.14);color:#F5C26B">переезд</span>' : ''}</span></div>
+    <div class="r"><span class="amt" style="color:${inc ? 'var(--inc)' : mv ? 'var(--acc)' : 'var(--t1)'}">${amount}</span><span style="font-size:11px" class="muted">${sub}</span></div></div>`;
+}
+function curOfWallet(name) { const w = (S.data.wallets || []).find(w => w.name === name); return w ? w.cur : 'EUR'; }
+
+function renderOps() {
+  const el = $('#s-ops'), O = S.ops;
+  const q = O.q.trim().toLowerCase();
+  const list = (S.data.ops || []).filter(op => {
+    if (O.type !== 'all' && op.type !== O.type) return false;
+    if (O.who !== 'all' && op.who !== O.who) return false;
+    if (q && (op.comment + ' ' + op.cat + ' ' + op.wallet + ' ' + op.who + ' ' + op.to).toLowerCase().indexOf(q) < 0) return false;
+    return true;
+  });
+  const shown = list.slice(0, O.limit);
+  const groups = [];
+  shown.forEach(op => { const g = groups[groups.length - 1]; if (g && g.date === op.date) g.items.push(op); else groups.push({ date: op.date, items: [op] }); });
+  const body = groups.map(g => {
+    const spentE = g.items.reduce((a, op) => a + (op.type === 'Расход' ? (opEur(op) || 0) : 0), 0);
+    return `<div style="display:flex;flex-direction:column;gap:8px"><div class="between" style="font-size:13px"><span style="font-weight:700;color:var(--t2)">${dayLabel(g.date)}</span>
+      <span class="muted">${spentE ? 'потрачено ≈ ' + fmt(spentE) + ' €' : ''}</span></div><div class="list">${g.items.map(opRow).join('')}</div></div>`;
+  }).join('');
+
+  const isFirst = !el.innerHTML;
+  if (isFirst) {
+    el.innerHTML = `<header class="between"><h1 class="h1">Операции</h1><span style="font-size:13px" class="muted" id="ops-count"></span></header>
+      <label class="row" style="height:48px;border-radius:16px;background:var(--s1);border:1px solid var(--line2);padding:0 14px;color:var(--t3)">
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <span class="sr">Поиск</span><input type="search" id="ops-q" placeholder="Поиск: такси, продукты, Лена…" style="flex:1;min-width:0;background:transparent;border:0;outline:none;color:var(--t1);font-size:14px"></label>
+      <div class="chips" id="ops-type"></div>
+      <div class="seg soft" id="ops-who" role="group" aria-label="Кто"></div>
+      <div id="ops-list" style="display:flex;flex-direction:column;gap:18px"></div>`;
+    $('#ops-q').addEventListener('input', e => { S.ops.q = e.target.value; S.ops.limit = 60; renderOps(); });
+  }
+  $('#ops-type').innerHTML = [['all', 'Все'], ['Расход', 'Расходы'], ['Доход', 'Доходы'], ['Перевод', 'Переводы и обмен']].map(x => `<button class="chip ${O.type === x[0] ? 'on' : ''}" data-act="opsType" data-v="${x[0]}">${x[1]}</button>`).join('');
+  $('#ops-who').innerHTML = [['all', 'Все'], ['Егор', 'Егор'], ['Лена', 'Лена'], ['Общее', 'Общее']].map(x => `<button class="${O.who === x[0] ? 'on' : ''}" data-act="opsWho" data-v="${x[0]}">${x[1]}</button>`).join('');
+  $('#ops-count').textContent = list.length + ' операций';
+  $('#ops-list').innerHTML = (body || '<div class="muted" style="text-align:center;padding:40px 0;font-size:14px">Ничего не найдено</div>') +
+    (list.length > shown.length ? '<button class="btn ghost" data-act="more">Показать ещё</button>' : '');
+}
+
+/* ================= БЮДЖЕТ ================= */
+function renderBudget() {
+  const el = $('#s-budget'), B = S.data.budget || {}, months = B.months || [];
+  if (!months.length) { el.innerHTML = '<h1 class="h1">Бюджет</h1><div class="err">Не нашёл таблицу на листе «По месяцам».</div>'; return; }
+  const mi = Math.min(S.budget.m, months.length - 1), mLabel = months[mi];
+  const groups = B.groups || [];
+  const plan = (B.total && B.total.plan) || groups.reduce((a, g) => a + g.plan, 0);
+  const facts = groups.map(g => g.fact[mi] || 0);
+  const spent = B.total ? B.total.fact[mi] : facts.reduce((a, b) => a + b, 0);
+  const base = Math.max(spent, plan), C = 2 * Math.PI * 80;
+  let acc = 0;
+  const segs = facts.map((f, i) => {
+    const len = Math.max(0, f / base * C - 14), off = -acc - 7; acc += f / base * C;
+    return f > 0 ? `<circle cx="105" cy="105" r="80" fill="none" stroke="${GROUP_COL[i % GROUP_COL.length]}" stroke-width="20" stroke-linecap="round" style="stroke-dasharray:0 ${C};stroke-dashoffset:${off};transition:stroke-dasharray 1s ${0.1 + i * 0.08}s cubic-bezier(.2,.8,.2,1)" data-dash="${len} ${C}"></circle>` : '';
+  }).join('');
+  const diff = spent - plan;
+
+  const gHtml = groups.map((g, i) => {
+    const f = g.fact[mi] || 0, p = g.plan || 0, over = f > p, open = S.budget.open === g.name;
+    const col = GROUP_COL[i % GROUP_COL.length];
+    const inW = over ? (p / f * 100) : (p ? f / p * 100 : 0);
+    const cats = g.cats.map(c => {
+      const v = c.fact[mi] || 0, o = c.plan ? v > c.plan : v > 0;
+      return `<div class="between" style="padding:9px 0;border-top:1px solid var(--line);font-size:13px"><span style="flex:1;color:var(--t2)">${esc(c.name)}</span>
+        <span style="font-weight:700;color:${o ? 'var(--exp)' : 'var(--t1)'}">${fmt(v)} €</span><span style="width:60px;text-align:right" class="muted">${c.plan ? fmt(c.plan, 0) + ' €' : '—'}</span></div>`;
+    }).join('');
+    return `<div style="background:var(--s1);border:1px solid var(--line);border-radius:20px;overflow:hidden">
+      <button data-act="bGroup" data-v="${esc(g.name)}" aria-expanded="${open}" style="width:100%;background:none;border:0;padding:14px 16px;display:flex;flex-direction:column;gap:10px;text-align:left">
+        <div class="row" style="width:100%"><span aria-hidden="true" style="width:10px;height:10px;border-radius:5px;background:${col};flex:none"></span>
+          <span style="flex:1;font-size:15px;font-weight:700">${esc(g.name)}</span><span class="num" style="font-weight:600;font-size:13px">${fmt(f)} €</span>
+          <span style="font-size:12px" class="muted">/ ${fmt(p, 0)} €</span>
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .25s;transform:rotate(${open ? 180 : 0}deg)"><path d="M6 9l6 6 6-6"/></svg></div>
+        <div class="bar" style="width:100%"><i data-w="${inW}" style="background:${col}"></i>${over ? `<i data-w="${100 - inW}" data-l="${inW}" style="background:var(--exp);border-radius:0"></i>` : ''}</div>
+        <span style="font-size:12px;font-weight:600;color:${over ? 'var(--exp)' : 'var(--t3)'}">${p ? (over ? 'Сверх плана на ' + fmt(f - p) + ' € · ' : 'Осталось ' + fmt(p - f) + ' € · ') + Math.round(f / p * 100) + '%' : 'Без плана'}</span>
+      </button>
+      ${open ? `<div style="padding:0 16px 12px;display:flex;flex-direction:column;animation:rise .3s both">${cats}</div>` : ''}
+    </div>`;
+  }).join('');
+
+  const O = B.outside;
+  const oCats = O ? O.cats.filter(c => c.fact[mi]).sort((a, b) => b.fact[mi] - a.fact[mi]) : [];
+  const oMax = oCats.length ? oCats[0].fact[mi] : 1;
+  const inc = B.income || { months: [], rows: [] }, ii = inc.months.indexOf(mLabel);
+  const sumRows = ii >= 0 ? inc.rows.map(r => {
+    const v = r.vals[ii] || 0, total = /^Всего|минус/.test(r.name), last = /минус/.test(r.name), isInc = /^Доход|Общие доходы|Всего доходов/.test(r.name);
+    return `<div class="between" style="font-size:${last ? 15 : 13}px;${total ? 'font-weight:700;padding-top:10px;border-top:1px solid var(--line)' : 'color:var(--t2)'}">
+      <span>${esc(r.name)}</span><span class="num" style="font-weight:600;color:${last ? (v < 0 ? 'var(--exp)' : 'var(--inc)') : isInc ? 'var(--inc)' : 'var(--t1)'}">${v < 0 ? '− ' : ''}${fmt(v)} €</span></div>`;
+  }).join('') : '';
+
+  el.innerHTML = `
+    <header class="between"><h1 class="h1">Бюджет</h1><span style="font-size:13px" class="muted">план ${fmt(plan, 0)} € в месяц</span></header>
+    <div class="seg" role="group" aria-label="Месяц">${months.map((m, i) => `<button class="${i === mi ? 'on' : ''}" data-act="bMonth" data-v="${i}">${esc(m)}</button>`).join('')}</div>
+    <div class="card" style="align-items:center;padding:20px">
+      <div style="position:relative;width:210px;height:210px">
+        <svg role="img" aria-label="Траты по группам бюджета" width="210" height="210" viewBox="0 0 210 210" style="transform:rotate(-90deg)">
+          <circle cx="105" cy="105" r="80" fill="none" stroke="#23272E" stroke-width="20"></circle>${segs}</svg>
+        <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px">
+          <span style="font-size:12px" class="muted">Потрачено</span><span class="num" style="font-weight:700;font-size:23px">${cnt(spent, 2, ' €')}</span>
+          <span style="font-size:12px" class="muted">из ${fmt(plan, 0)} €</span></div>
+      </div>
+      <span style="height:32px;padding:0 14px;border-radius:16px;display:flex;align-items:center;font-size:13px;font-weight:700;${diff > 0 ? 'background:rgba(255,138,101,.14);color:var(--exp)' : 'background:rgba(91,227,166,.14);color:var(--inc)'}">${diff > 0 ? 'Перерасход ' + fmt(diff) + ' €' : 'Осталось ' + fmt(-diff) + ' €'}</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px"><span class="card-t">Группы · план и факт</span>${gHtml}</div>
+    ${O ? `<div class="card"><div class="between"><span class="card-t">Вне бюджета</span><span class="num" style="font-weight:600;font-size:15px">${fmt(O.fact[mi] || 0)} €</span></div>
+      <span style="font-size:12px" class="muted">Поездки, подарки, платежи и налоги в РФ — не входят в план</span>
+      ${oCats.map(c => `<div style="display:flex;flex-direction:column;gap:6px"><div class="between" style="font-size:13px"><span style="color:var(--t2)">${esc(c.name)}</span><span style="font-weight:700">${fmt(c.fact[mi])} €</span></div>
+        <div class="bar" style="height:6px"><i data-w="${c.fact[mi] / oMax * 100}" style="background:#9AA3AF"></i></div></div>`).join('')}</div>` : ''}
+    ${sumRows ? `<div class="card" style="gap:10px"><span class="card-t">Итог месяца</span>${sumRows}</div>` : ''}`;
+  animate(el);
+}
+
+/* ================= ИЗ РФ ================= */
+function renderRF() {
+  const el = $('#s-rf'), rows = (S.data.rf && S.data.rf.rows) || [];
+  const whoList = Array.from(new Set(rows.map(r => r.who)));
+  const sel = rows.filter(r => S.rf.who === 'all' || r.who === S.rf.who);
+  const sent = sel.reduce((a, r) => a + (r.sent || 0), 0);
+  const got = sel.reduce((a, r) => a + (r.gotEur || r.got || 0), 0);
+  const loss = sel.reduce((a, r) => a + (r.lossEur || 0), 0);
+  const avg = got ? sent / got : 0, lossShare = got + loss ? loss / (got + loss) : 0;
+  const cbNow = R().RUB;
+  const est = cbNow ? S.rf.rub / cbNow * (1 - lossShare) : null;
+
+  // график
+  const pts = rows.filter(r => r.rate && r.cb);
+  let chart = '';
+  if (pts.length > 1) {
+    const all = pts.map(r => r.rate).concat(pts.map(r => r.cb)).concat(cbNow ? [cbNow] : []);
+    const hi = Math.ceil(Math.max.apply(null, all) + 1), lo = Math.floor(Math.min.apply(null, all) - 1);
+    const W = 310, X0 = 30, X1 = 300, Y0 = 12, Y1 = 118;
+    const x = i => (X0 + i * (X1 - X0) / (pts.length - 1)).toFixed(1);
+    const y = v => (Y0 + (hi - v) / (hi - lo) * (Y1 - Y0)).toFixed(1);
+    const f = pts.map((r, i) => x(i) + ',' + y(r.rate)), c = pts.map((r, i) => x(i) + ',' + y(r.cb));
+    const mid = (hi + lo) / 2;
+    const dd = iso => { const p = iso.split('-'); return +p[2] + ' ' + MONTHS_G[+p[1] - 1].slice(0, 3); };
+    chart = `<svg role="img" aria-label="Наш курс обмена и курс ЦБ по датам переводов" width="100%" viewBox="0 0 ${W} 150" style="overflow:visible">
+      ${[hi, mid, lo].map(v => `<line x1="${X0}" y1="${y(v)}" x2="${W}" y2="${y(v)}" stroke="#23272E"/><text x="0" y="${+y(v) + 4}" fill="#9AA3AF" font-size="10" font-family="Manrope">${fmt(v, 0)}</text>`).join('')}
+      <polygon points="${f.concat(c.slice().reverse()).join(' ')}" fill="rgba(255,138,101,.12)" style="opacity:0;transition:opacity .8s .6s" data-fade="1"/>
+      <polyline points="${c.join(' ')}" fill="none" stroke="#7CCBF5" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" pathLength="100" style="stroke-dasharray:0 100;transition:stroke-dasharray 1.2s cubic-bezier(.2,.8,.2,1)" data-dash="100 100"/>
+      <polyline points="${f.join(' ')}" fill="none" stroke="#FF8A65" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" pathLength="100" style="stroke-dasharray:0 100;transition:stroke-dasharray 1.2s .1s cubic-bezier(.2,.8,.2,1)" data-dash="100 100"/>
+      ${cbNow ? `<line x1="${X0}" y1="${y(cbNow)}" x2="${W}" y2="${y(cbNow)}" stroke="#A99BFF" stroke-dasharray="3 4"/><text x="${W}" y="${+y(cbNow) - 5}" text-anchor="end" fill="#C2B8FF" font-size="10" font-family="Manrope">ЦБ сегодня ${fmt(cbNow, 2)}</text>` : ''}
+      <text x="${X0}" y="142" fill="#9AA3AF" font-size="10" font-family="Manrope">${dd(pts[0].date)}</text>
+      <text x="${X1}" y="142" text-anchor="end" fill="#9AA3AF" font-size="10" font-family="Manrope">${dd(pts[pts.length - 1].date)}</text></svg>`;
+  }
+
+  const list = sel.slice().reverse().map(r => {
+    const bad = (r.lossPct || 0) >= 0.045;
+    const p = r.date.split('-');
+    return `<div style="display:flex;flex-direction:column;gap:6px;padding:14px 0;border-top:1px solid var(--line)">
+      <div class="between"><span style="font-size:13px;font-weight:700">${+p[2]}.${p[1]} · ${esc(r.who)}</span>
+        <span class="pill" style="${bad ? 'background:rgba(255,138,101,.16);color:var(--exp)' : 'background:rgba(245,194,107,.14);color:var(--amb)'}">−${fmt((r.lossPct || 0) * 100, 1)}%</span></div>
+      <div class="between" style="align-items:baseline"><span class="num" style="font-size:13px;color:#C2B8FF">${fmt(r.sent, 0)} ₽</span><span class="num" style="font-size:13px;color:var(--acc)">${money(r.got, r.cur)}</span></div>
+      <div class="between" style="font-size:11px" ><span class="muted" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.from)} → ${esc(r.to)}</span>
+        <span class="muted" style="flex:none">курс ${fmt(r.rate, 2)} · ЦБ ${fmt(r.cb, 2)} · −${fmt(r.lossEur || 0)} €</span></div></div>`;
+  }).join('');
+
+  const first = !el.innerHTML;
+  el.innerHTML = `
+    <header style="display:flex;flex-direction:column;gap:4px"><h1 class="h1">Переводы из РФ</h1><span style="font-size:13px" class="muted">Сколько рублей ушло и сколько евро дошло</span></header>
+    ${whoList.length ? `<div class="chips" role="group" aria-label="Чьи переводы">${[['all', 'Все']].concat(whoList.map(w => [w, w])).map(x => `<button class="chip ${S.rf.who === x[0] ? 'on' : ''}" data-act="rfWho" data-v="${esc(x[0])}">${esc(x[1])}</button>`).join('')}</div>` : ''}
+    <div class="card" style="gap:18px;padding:20px">
+      <div class="row"><div style="flex:1;display:flex;flex-direction:column;gap:4px"><span style="font-size:12px" class="muted">Отправлено</span><span class="num" style="font-weight:700;font-size:19px;color:#C2B8FF">${cnt(sent, 0, ' ₽')}</span></div>
+        <div class="flow" aria-hidden="true" style="width:36px;height:36px;border-radius:18px;background:var(--s3);color:var(--acc);display:flex;align-items:center;justify-content:center;flex:none"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+        <div style="flex:1;display:flex;flex-direction:column;gap:4px;align-items:flex-end"><span style="font-size:12px" class="muted">Получено</span><span class="num" style="font-weight:700;font-size:19px;color:var(--acc)">${cnt(got, 2, ' €')}</span></div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div style="background:var(--bg);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:4px"><span style="font-size:12px" class="muted">Средний курс</span><span class="num" style="font-weight:600;font-size:17px">${fmt(avg, 2)} ₽</span><span style="font-size:11px" class="muted">за 1 €</span></div>
+        <div style="background:rgba(255,138,101,.1);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:4px"><span style="font-size:12px;color:#FFB199">Потери на курсе</span><span class="num" style="font-weight:600;font-size:17px;color:var(--exp)">${cnt(loss, 2, ' €')}</span><span style="font-size:11px;color:#FFB199">≈ ${fmt(lossShare * 100, 1)}% от суммы</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <span class="card-t">Если перевести сейчас</span>
+      <label class="row" style="height:56px;padding:0 16px;border-radius:16px;background:var(--bg);border:1px solid var(--line2)">
+        <span class="muted" style="font-size:14px">Отправляю</span>
+        <input id="rf-rub" inputmode="decimal" value="${esc(S.rf.rub)}" style="flex:1;min-width:0;background:none;border:0;outline:none;text-align:right;font-family:Unbounded;font-size:18px;color:var(--t1)">
+        <span style="font-weight:700" class="muted">₽</span></label>
+      <div class="between"><span class="muted" style="font-size:13px">По курсу ЦБ ${cbNow ? fmt(cbNow, 2) + ' ₽' : ''}</span><span class="num" style="font-weight:600" id="rf-cb">${cbNow ? fmt(S.rf.rub / cbNow) + ' €' : '—'}</span></div>
+      <div class="between"><span style="font-size:13px;font-weight:700">С вашей обычной потерей ${fmt(lossShare * 100, 1)}%</span><span class="num" style="font-weight:700;color:var(--acc);font-size:16px" id="rf-est">${est != null ? '≈ ' + fmt(est) + ' €' : '—'}</span></div>
+      ${cbNow && avg ? `<div class="verdict" style="background:${cbNow < avg ? 'rgba(91,227,166,.12);color:var(--inc)' : 'rgba(255,138,101,.12);color:#FFB199'}">${cbNow < avg ? 'Евро сейчас дешевле, чем в среднем по вашим переводам: ЦБ ' + fmt(cbNow, 2) + ' ₽ против ваших ' + fmt(avg, 2) + ' ₽.' : 'Евро сейчас дороже вашего среднего курса: ЦБ ' + fmt(cbNow, 2) + ' ₽ против ' + fmt(avg, 2) + ' ₽.'}</div>` : ''}
+    </div>
+    ${chart ? `<div class="card"><div class="between"><span class="card-t">Курс: наш и ЦБ</span>
+      <div class="row" style="gap:12px;font-size:12px;color:var(--t3)"><span class="row" style="gap:5px"><span aria-hidden="true" style="width:12px;height:3px;border-radius:2px;background:var(--exp)"></span>Наш</span>
+      <span class="row" style="gap:5px"><span aria-hidden="true" style="width:12px;height:3px;border-radius:2px;background:var(--acc)"></span>ЦБ</span></div></div>
+      ${chart}<span style="font-size:12px" class="muted">Закрашено — то, что теряли на обмене</span></div>` : ''}
+    <div style="display:flex;flex-direction:column;gap:10px"><span class="card-t">Все переводы</span>
+      <div class="list" style="padding-top:0">${list.replace('border-top:1px solid var(--line)', '') || '<div class="item muted" style="font-size:13px">Переводов пока нет</div>'}</div></div>`;
+  animate(el);
+  requestAnimationFrame(() => requestAnimationFrame(() => el.querySelectorAll('[data-fade]').forEach(p => p.style.opacity = 1)));
+  $('#rf-rub').addEventListener('input', e => {
+    const v = parseFloat(e.target.value.replace(',', '.').replace(/\s/g, '')) || 0;
+    S.rf.rub = v;
+    $('#rf-cb').textContent = cbNow ? fmt(v / cbNow) + ' €' : '—';
+    $('#rf-est').textContent = cbNow ? '≈ ' + fmt(v / cbNow * (1 - lossShare)) + ' €' : '—';
+  });
+}
+
+/* ================= НОВАЯ ОПЕРАЦИЯ ================= */
+function openAdd() {
+  const ws = S.data.wallets || [];
+  let lastW = null; try { lastW = localStorage.getItem('lastWallet'); } catch (e) {}
+  const me = (S.me && S.me.name) || 'Общее';
+  S.add = { type: 'Расход', who: 'Общее', wallet: ws.some(w => w.name === lastW) ? lastW : (ws[0] && ws[0].name), to: '', amount: '', received: '', cat: '', move: false, check: false, spread: 1, comment: '' };
+  $('#a-date').value = todayISO();
+  renderAdd();
+  $('#sh-add').classList.add('open');
+  tg && tg.BackButton && tg.BackButton.show();
+  setTimeout(() => { const i = $('#a-amount'); i && i.focus(); }, 380);
+}
+function closeAdd() { $('#sh-add').classList.remove('open'); syncBack(); }
+function syncBack() { if (!tg || !tg.BackButton) return; if (document.querySelector('.sheet.open')) tg.BackButton.show(); else tg.BackButton.hide(); }
+function closeTop() { const o = document.querySelectorAll('.sheet.open'); if (o.length) { o[o.length - 1].classList.remove('open'); syncBack(); } }
+const fitW = v => Math.min(9, Math.max(1, String(v || '0').length)) * 0.82 + 0.4 + 'em';
+const parseNum = s => { const v = parseFloat(String(s || '').replace(',', '.').replace(/\s/g, '')); return isFinite(v) ? v : 0; };
+
+function renderAdd() {
+  const A = S.add, D = S.data, ws = D.wallets || [];
+  const cur = curOfWallet(A.wallet), color = A.type === 'Доход' ? 'var(--inc)' : A.type === 'Расход' ? 'var(--exp)' : 'var(--acc)';
+  const wchip = (w, sel, act) => { const c = CUR_COL[w.cur] || '#9AA3AF'; return `<button class="wchip ${sel ? 'on' : ''}" data-act="${act}" data-v="${esc(w.name)}"><span class="cb" style="background:${c}24;color:${c}">${esc(SYM[w.cur] || w.cur)}</span>${esc(w.name)}</button>`; };
+  let cats = '';
+  if (A.type === 'Доход') {
+    const inc = (D.dict && D.dict.income && D.dict.income.length) ? D.dict.income : ['Работа / ИП', 'Прочий доход'];
+    cats = `<div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:12px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--inc)">Доходы</span>
+      <div class="wrap">${inc.map(c => catBtn(c, '#5BE3A6')).join('')}</div></div>`;
+  } else if (A.type === 'Расход') {
+    const exp = (D.dict && D.dict.expense) || [];
+    const order = [];
+    exp.forEach(c => { if (order.indexOf(c.group) < 0) order.push(c.group); });
+    const gidx = g => { const i = ((D.budget && D.budget.groups) || []).findIndex(x => x.name === g); return i < 0 ? 5 : i; };
+    cats = order.map(g => `<div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:12px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:${GROUP_COL[gidx(g) % GROUP_COL.length]}">${esc(g)}</span>
+      <div class="wrap">${exp.filter(c => c.group === g).map(c => catBtn(c.name, GROUP_COL[gidx(g) % GROUP_COL.length])).join('')}</div></div>`).join('');
+  }
+  function catBtn(name, col) { const on = A.cat === name; return `<button class="cat" data-act="addCat" data-v="${esc(name)}" style="${on ? `background:${col};color:#0E1013;border-color:${col}` : ''}">${esc(name)}</button>`; }
+
+  const tcur = curOfWallet(A.to);
+  $('#add-body').innerHTML = `
+    <div class="seg" role="group" aria-label="Тип операции">${['Расход', 'Доход', 'Перевод'].map(t => `<button class="${A.type === t ? 'on' : ''}" data-act="addType" data-v="${t}">${t}</button>`).join('')}</div>
+    <label style="display:flex;flex-direction:column;align-items:center;gap:4px">
+      <span class="lbl">${A.type === 'Перевод' ? 'Отправлено' : 'Сумма'}</span>
+      <div class="row" style="align-items:baseline;justify-content:center;gap:6px;width:100%">
+        <span class="num" style="font-weight:700;font-size:38px;color:${color}">${A.type === 'Доход' ? '+' : A.type === 'Расход' ? '−' : ''}</span>
+        <input id="a-amount" class="amount-in" inputmode="decimal" placeholder="0" value="${esc(A.amount)}" style="color:${color};width:${fitW(A.amount)}">
+        <span class="num muted" style="font-size:20px">${esc(SYM[cur] || cur)}</span></div>
+      <span id="a-calc" class="muted" style="font-size:13px;min-height:18px;text-align:center"></span>
+    </label>
+    <div style="display:flex;flex-direction:column;gap:8px"><span class="lbl">Кто</span>
+      <div class="seg soft" role="group" aria-label="Кто">${['Егор', 'Лена', 'Общее'].map(w => `<button class="${A.who === w ? 'on' : ''}" data-act="addWho" data-v="${w}">${w}</button>`).join('')}</div></div>
+    <div style="display:flex;flex-direction:column;gap:8px"><span class="lbl">${A.type === 'Перевод' ? 'Откуда' : A.type === 'Доход' ? 'Куда пришло' : 'Чем платили'}</span>
+      <div class="wrap">${ws.map(w => wchip(w, A.wallet === w.name, 'addWallet')).join('')}</div></div>
+    ${A.type === 'Перевод' ? `
+      <div style="display:flex;flex-direction:column;gap:8px"><span class="lbl">Куда</span>
+        <div class="wrap">${ws.filter(w => w.name !== A.wallet).map(w => wchip(w, A.to === w.name, 'addTo')).join('')}</div></div>
+      ${A.to ? `<label class="row" style="height:56px;padding:0 16px;border-radius:16px;background:var(--s1);border:1px solid var(--line2)">
+        <span class="muted" style="font-size:14px">Получено</span>
+        <input id="a-recv" inputmode="decimal" placeholder="0" value="${esc(A.received)}" style="flex:1;min-width:0;background:none;border:0;outline:none;text-align:right;font-family:Unbounded;font-size:18px;color:var(--t1)">
+        <span style="font-weight:700" class="muted">${esc(SYM[tcur] || tcur)}</span></label>
+      <div id="a-rate" style="display:flex;flex-direction:column;gap:8px"></div>` : ''}` : `
+      <div style="display:flex;flex-direction:column;gap:14px"><span class="lbl">Категория</span>${cats}</div>`}
+    <div style="background:var(--s1);border-radius:20px;padding:4px 16px">
+      <div class="row" style="padding:14px 0"><div class="grow"><span style="font-size:14px;font-weight:600">Есть чек</span><span style="font-size:12px" class="muted">Допишу «(есть чек)» в комментарий</span></div>
+        <button class="sw" role="switch" aria-checked="${A.check}" aria-label="Есть чек" data-act="addCheck"></button></div>
+      <div class="row" style="padding:14px 0;border-top:1px solid var(--line)"><div class="grow"><span style="font-size:14px;font-weight:600">Переезд</span><span style="font-size:12px" class="muted">Не считать в обычном бюджете</span></div>
+        <button class="sw" role="switch" aria-checked="${A.move}" aria-label="Переезд" data-act="addMove"></button></div>
+      ${A.type === 'Расход' ? `<div class="row" style="padding:14px 0;border-top:1px solid var(--line)"><div class="grow"><span style="font-size:14px;font-weight:600">Растянуть на, мес.</span><span style="font-size:12px" class="muted">Годовую оплату разложить по месяцам</span></div>
+        <div class="row" style="gap:4px"><button class="step" data-act="spread" data-v="-1" aria-label="Меньше">−</button><span class="num" style="width:32px;text-align:center;font-size:15px">${A.spread}</span><button class="step" data-act="spread" data-v="1" aria-label="Больше">+</button></div></div>` : ''}
+    </div>
+    <label style="display:flex;flex-direction:column;gap:8px"><span class="lbl">Комментарий</span>
+      <input id="a-comment" class="field" placeholder="Например: Пекарня" value="${esc(A.comment)}"></label>
+    <div id="a-err"></div>`;
+  $('#a-amount').addEventListener('input', e => { A.amount = e.target.value; e.target.style.width = fitW(A.amount); addCalc(); });
+  $('#a-comment').addEventListener('input', e => { A.comment = e.target.value; });
+  const rv = $('#a-recv'); if (rv) rv.addEventListener('input', e => { A.received = e.target.value; addCalc(); });
+  addCalc();
+}
+
+function addCalc() {
+  const A = S.add, cur = curOfWallet(A.wallet), a = parseNum(A.amount);
+  const others = ['EUR', 'RSD', 'RUB'].filter(c => c !== cur);
+  $('#a-calc').textContent = a ? '≈ ' + others.map(c => { const v = conv(a, cur, c); return v == null ? '' : money(v, c, c === 'EUR' ? 2 : 0); }).filter(Boolean).join(' · ') : '';
+  const box = $('#a-rate');
+  if (!box) return;
+  const tcur = curOfWallet(A.to), r = parseNum(A.received);
+  const fair = conv(a, cur, tcur);
+  if (!a || !A.to) { box.innerHTML = ''; return; }
+  if (cur === tcur) { box.innerHTML = '<span class="muted" style="font-size:12px">Перевод в той же валюте — курс не нужен</span>'; return; }
+  const strong = (R()[cur] || 0) < (R()[tcur] || 0); // cur «дороже» → курс показываем как tcur за 1 cur
+  const official = strong ? R()[tcur] / R()[cur] : R()[cur] / R()[tcur];
+  const unit = strong ? `${SYM[tcur]} за 1 ${SYM[cur]}` : `${SYM[cur]} за 1 ${SYM[tcur]}`;
+  let html = `<div class="between" style="font-size:13px"><span class="muted">Курс сегодня${cur === 'RUB' || tcur === 'RUB' ? ' (ЦБ)' : ''}</span><span style="font-weight:700">${fmt(official, official < 1 ? 4 : 2)} ${unit}</span></div>
+    <div class="between" style="font-size:13px"><span class="muted">По этому курсу пришло бы</span><span style="font-weight:700">${fair == null ? '—' : money(fair, tcur)}</span></div>`;
+  if (r && fair) {
+    const actual = strong ? r / a : a / r;
+    const lossPct = 1 - r / fair, lossEur = conv(fair - r, tcur, 'EUR');
+    const v = lossPct < 0.015 ? ['rgba(91,227,166,.12)', 'var(--inc)', 'Хороший курс'] : lossPct < 0.035 ? ['rgba(245,194,107,.12)', 'var(--amb)', 'Нормальный курс'] : ['rgba(255,138,101,.12)', '#FFB199', 'Дорогой обмен'];
+    html += `<div class="between" style="font-size:13px"><span class="muted">Ваш курс</span><span style="font-weight:700">${fmt(actual, actual < 1 ? 4 : 2)} ${unit}</span></div>
+      <div class="verdict" style="background:${v[0]};color:${v[1]}">${v[2]}: ${lossPct >= 0 ? 'потеря' : 'выгода'} ${fmt(Math.abs(lossPct) * 100, 1)}%${lossEur != null ? ' ≈ ' + fmt(Math.abs(lossEur)) + ' €' : ''}</div>`;
+  }
+  box.innerHTML = html;
+}
+
+async function saveAdd() {
+  if (S.busy) return;
+  const A = S.add, err = $('#a-err');
+  err.innerHTML = '';
+  const amount = parseNum(A.amount);
+  const fail = m => { err.innerHTML = '<div class="err">' + esc(m) + '</div>'; haptic('err'); };
+  if (!(amount > 0)) return fail('Введите сумму');
+  if (!A.wallet) return fail('Выберите кошелёк');
+  if (A.type !== 'Перевод' && !A.cat) return fail('Выберите категорию');
+  if (A.type === 'Перевод' && !A.to) return fail('Выберите, куда перевод');
+  let comment = A.comment.trim();
+  if (A.check && !/чек/i.test(comment)) comment = (comment ? comment + ' ' : '') + '(есть чек)';
+  const op = { date: $('#a-date').value || todayISO(), type: A.type, who: A.who, wallet: A.wallet, amount, cur: curOfWallet(A.wallet),
+    cat: A.type === 'Перевод' ? '' : A.cat, to: A.type === 'Перевод' ? A.to : '', received: A.type === 'Перевод' ? parseNum(A.received) : '',
+    move: A.move, spread: A.type === 'Расход' ? A.spread : 1, comment };
+  try { localStorage.setItem('lastWallet', A.wallet); } catch (e) {}
+  const btn = $('#a-save');
+  S.busy = true; btn.disabled = true; btn.textContent = 'Записываю…';
+  try {
+    if (DEMO) {
+      op.row = Date.now();
+      S.data.ops.unshift(op);
+      demoApply(op, 1);
+      S.lastRow = op.row;
+    } else {
+      const j = await api('add', { op });
+      Object.assign(S.data, j);
+      S.lastRow = j.row;
+    }
+    haptic('ok');
+    closeAdd();
+    renderAll();
+    toast('Записано: ' + (op.type === 'Доход' ? '+' : op.type === 'Расход' ? '−' : '') + money(op.amount, op.cur), 'Отменить', undoLast);
+  } catch (e) {
+    fail(e.message);
+  } finally {
+    S.busy = false; btn.disabled = false; btn.textContent = 'Сохранить в таблицу';
+  }
+}
+
+async function undoLast() {
+  if (!S.lastRow) return;
+  try {
+    if (DEMO) {
+      const i = S.data.ops.findIndex(o => o.row === S.lastRow);
+      if (i >= 0) { demoApply(S.data.ops[i], -1); S.data.ops.splice(i, 1); }
+    } else {
+      const j = await api('undo', { row: S.lastRow });
+      Object.assign(S.data, j);
+    }
+    S.lastRow = null;
+    renderAll();
+    toast('Операция удалена из таблицы');
+  } catch (e) { toast('Не получилось отменить: ' + e.message); }
+}
+
+/* ================= КОНВЕРТЕР ================= */
+function openConv() { renderConv(); $('#sh-conv').classList.add('open'); syncBack(); }
+function renderConv() {
+  const C = S.conv, r = R();
+  const list = ['EUR', 'RSD', 'RUB', 'USD', 'AMD', 'TRY', 'GBP', 'CHF', 'GEL', 'KZT'].filter(c => r[c]);
+  $('#conv-body').innerHTML = `
+    <div class="chips" role="group" aria-label="Из какой валюты">${list.map(c => `<button class="chip ${C.cur === c ? 'on' : ''}" data-act="convCur" data-v="${c}">${esc(SYM[c] || '')} ${c}</button>`).join('')}</div>
+    <label style="display:flex;flex-direction:column;align-items:center;gap:6px"><span class="lbl">Сумма</span>
+      <div class="row" style="align-items:baseline;justify-content:center;gap:8px;width:100%"><input id="c-amount" class="amount-in" inputmode="decimal" value="${esc(C.amount)}" style="color:var(--acc);width:${fitW(C.amount)}"><span class="num muted" style="font-size:20px">${esc(SYM[C.cur] || C.cur)}</span></div></label>
+    <div class="list" id="c-list"></div>
+    <span class="muted" style="font-size:11px">${esc(((S.rates && S.rates.sources) || []).join(' · '))}. Рубль — по официальному курсу ЦБ, остальные — рыночный курс. В обменниках и банках курс хуже на 1–5%.</span>`;
+  const draw = () => {
+    const a = parseNum(C.amount);
+    $('#c-list').innerHTML = list.filter(c => c !== C.cur).map(c => {
+      const v = conv(a, C.cur, c), one = conv(1, C.cur, c);
+      return `<div class="item"><span class="cb" style="background:${(CUR_COL[c] || '#9AA3AF')}24;color:${CUR_COL[c] || '#C9CFD8'};width:40px;height:40px;border-radius:14px">${esc(SYM[c] || c)}</span>
+        <div class="grow"><span class="ttl">${c}</span><span class="meta">1 ${esc(SYM[C.cur] || C.cur)} = ${fmt(one, one < 1 ? 4 : 2)} ${esc(SYM[c] || c)}</span></div>
+        <span class="num" style="font-size:15px;font-weight:600">${v == null ? '—' : fmt(v, v >= 1000 ? 0 : 2)}</span></div>`;
+    }).join('');
+  };
+  $('#c-amount').addEventListener('input', e => { C.amount = e.target.value; e.target.style.width = fitW(C.amount); draw(); });
+  draw();
+}
+
+/* ================= ТОСТ ================= */
+let toastT;
+function toast(text, btnText, cb) {
+  const t = $('#toast'), b = $('#toast-b');
+  $('#toast-t').textContent = text;
+  if (btnText) { b.textContent = btnText; b.classList.remove('hidden'); b.onclick = () => { t.classList.remove('on'); cb(); }; } else b.classList.add('hidden');
+  t.classList.add('on');
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), btnText ? 6000 : 3000);
+}
+
+/* ================= СОБЫТИЯ ================= */
+document.addEventListener('click', e => {
+  const g = e.target.closest('[data-go]');
+  if (g) { go(g.dataset.go); return; }
+  const b = e.target.closest('[data-act]');
+  if (!b) return;
+  const v = b.dataset.v, A = S.add;
+  switch (b.dataset.act) {
+    case 'homeCur': S.home.cur = v; renderHome(); haptic(); break;
+    case 'wcur': S.home.wcur = v; renderHome(); haptic(); break;
+    case 'refresh': refresh(); break;
+    case 'opsType': S.ops.type = v; S.ops.limit = 60; renderOps(); haptic(); break;
+    case 'opsWho': S.ops.who = v; S.ops.limit = 60; renderOps(); haptic(); break;
+    case 'more': S.ops.limit += 60; renderOps(); break;
+    case 'bMonth': S.budget.m = +v; renderBudget(); haptic(); break;
+    case 'bGroup': S.budget.open = S.budget.open === v ? null : v; renderBudget(); haptic(); break;
+    case 'rfWho': S.rf.who = v; renderRF(); haptic(); break;
+    case 'openAdd': openAdd(); haptic(); break;
+    case 'closeAdd': closeAdd(); break;
+    case 'openConv': openConv(); break;
+    case 'closeConv': $('#sh-conv').classList.remove('open'); syncBack(); break;
+    case 'convCur': S.conv.cur = v; renderConv(); haptic(); break;
+    case 'addType': A.type = v; A.cat = ''; if (v === 'Перевод' && A.to === A.wallet) A.to = ''; renderAdd(); haptic(); break;
+    case 'addWho': A.who = v; renderAdd(); haptic(); break;
+    case 'addWallet': A.wallet = v; if (A.to === v) A.to = ''; renderAdd(); haptic(); break;
+    case 'addTo': A.to = v; renderAdd(); haptic(); break;
+    case 'addCat': A.cat = v; renderAdd(); haptic(); break;
+    case 'addCheck': A.check = !A.check; renderAdd(); haptic(); break;
+    case 'addMove': A.move = !A.move; renderAdd(); haptic(); break;
+    case 'spread': A.spread = Math.max(1, Math.min(24, A.spread + (+v))); renderAdd(); haptic(); break;
+    case 'save': saveAdd(); break;
+  }
+});
+
+async function refresh() {
+  const ic = $('#ref-ic'); if (ic) ic.style.animation = 'spin .9s linear infinite';
+  try {
+    if (DEMO) { S.rates = await ratesDirect(); if (!S.rates.rates.RSD) S.rates = demoRates(); }
+    else { const j = await api('all'); Object.assign(S.data, j); S.rates = j.rates; }
+    renderAll(); toast('Обновлено'); haptic('ok');
+  } catch (e) { toast('Ошибка: ' + e.message); haptic('err'); }
+}
+
+/* ================= ДЕМО-ДАННЫЕ (выдуманные цифры) ================= */
+function demoRates() {
+  return { rates: { EUR: 1, RSD: 117.2, RUB: 92.5, USD: 1.08, AMD: 420, TRY: 37.5, GBP: 0.84, CHF: 0.94 }, chg: { EUR: 0, RUB: 0.004, RSD: 0, USD: -0.002, AMD: 0.001, TRY: 0.003, GBP: 0, CHF: 0 }, sources: ['пример курсов'] };
+}
+function demoData() {
+  const t = todayISO(), d = n => { const x = new Date(Date.now() - n * 864e5); x.setMinutes(x.getMinutes() - x.getTimezoneOffset()); return x.toISOString().slice(0, 10); };
+  const G = [['Обязательное', [['Жильё', 700], ['Коммуналка', 155], ['Визаран', 85], ['Подписки', 55], ['Связь и интернет', 55], ['Такси', 30], ['Транспорт', 0], ['Кошка', 25], ['Налоги ИП Сербия', 300]]],
+    ['Еда', [['Продукты', 335], ['Кафе и рестораны', 200], ['Доставка еды', 50]]],
+    ['Личное', [['Курение', 50], ['Бытовое', 40], ['Одежда', 30], ['Здоровье', 30], ['Косметика и уход', 20], ['Обучение', 0], ['Танцы', 50]]],
+    ['Радости', [['Развлечения', 40]]],
+    ['Запас', [['Прочее', 20], ['Банковские комиссии', 10], ['Работа и техника', 20], ['Сверка', 0]]]];
+  const rnd = (p, k) => Math.round(p * k * 100) / 100;
+  const groups = G.map((g, gi) => {
+    const cats = g[1].map((c, ci) => ({ name: c[0], plan: c[1], fact: [rnd(c[1] || 20, 0.4 + ((ci * 7 + gi) % 5) / 10), rnd(c[1] || 20, 0.6 + ((ci * 3 + gi) % 7) / 10)] }));
+    return { name: g[0], plan: g[1].reduce((a, c) => a + c[1], 0), fact: [0, 1].map(i => cats.reduce((a, c) => a + c.fact[i], 0)), cats };
+  });
+  const tot = [0, 1].map(i => groups.reduce((a, g) => a + g.fact[i], 0));
+  const exp = [];
+  G.forEach(g => g[1].forEach(c => exp.push({ name: c[0], plan: c[1], group: g[0] })));
+  ['Путешествия', 'Подарки', 'Платежи в РФ', 'Налоги РФ', 'Документы и ВНЖ', 'Билеты и дорога'].forEach(n => exp.push({ name: n, plan: null, group: 'Вне бюджета' }));
+  return {
+    wallets: [
+      { name: 'Армянская карта', cur: 'EUR', owner: 'Общее', balance: 5000 },
+      { name: 'Наличные EUR', cur: 'EUR', owner: 'Общее', balance: 3000 },
+      { name: 'Наличные RSD', cur: 'RSD', owner: 'Общее', balance: 20000 },
+      { name: 'Сербский счёт', cur: 'RSD', owner: 'Общее', balance: 0 },
+      { name: 'Карты РФ — Егор', cur: 'RUB', owner: 'Егор', balance: 50000 },
+      { name: 'Общий счёт РФ', cur: 'RUB', owner: 'Общее', balance: 100000 },
+      { name: 'Карты РФ — Лена', cur: 'RUB', owner: 'Лена', balance: 50000 }],
+    money: { runway: 4.2, budget: 2300, rfMonthly: 500, trips: 1000 },
+    budget: { months: ['Сен 26', 'Окт 26'], groups, total: { plan: 2300, fact: tot },
+      outside: { fact: [120, 340], cats: [{ name: 'Подарки', fact: [40, 90] }, { name: 'Платежи в РФ', fact: [80, 250] }] },
+      income: { months: ['Сен 26', 'Окт 26'], rows: [{ name: 'Доходы Лены', vals: [1500, 1600] }, { name: 'Доходы Егора', vals: [700, 800] }, { name: 'Всего доходов', vals: [2200, 2400] }, { name: 'Всего трат (с вне бюджета)', vals: [-(tot[0] + 120), -(tot[1] + 340)] }, { name: 'Доходы минус траты', vals: [2200 - tot[0] - 120, 2400 - tot[1] - 340] }] } },
+    ops: [
+      { row: 1, date: t, type: 'Расход', who: 'Общее', wallet: 'Наличные RSD', amount: 450, cur: 'RSD', cat: 'Кафе и рестораны', comment: 'Пекарня (есть чек)' },
+      { row: 2, date: t, type: 'Расход', who: 'Общее', wallet: 'Армянская карта', amount: 18.4, cur: 'EUR', cat: 'Продукты', comment: 'Доставка продуктов' },
+      { row: 3, date: d(1), type: 'Доход', who: 'Егор', wallet: 'Карты РФ — Егор', amount: 15000, cur: 'RUB', cat: 'Работа / ИП', comment: 'Монтаж ролика' },
+      { row: 4, date: d(1), type: 'Расход', who: 'Лена', wallet: 'Наличные RSD', amount: 2500, cur: 'RSD', cat: 'Танцы', comment: 'Аренда зала' },
+      { row: 5, date: d(2), type: 'Перевод', who: 'Общее', wallet: 'Наличные EUR', amount: 100, cur: 'EUR', to: 'Наличные RSD', received: 11650, comment: 'Обмен' },
+      { row: 6, date: d(3), type: 'Расход', who: 'Общее', wallet: 'Карты РФ — Лена', amount: 1200, cur: 'RUB', cat: 'Такси', comment: '' }],
+    rf: { rows: [
+      { date: d(40), who: 'Общее', from: 'Общий счёт РФ', sent: 100000, to: 'Армянская карта', got: 960, cur: 'EUR', rate: 104.17, cb: 100.1, lossPct: 0.039, lossEur: 39, gotEur: 960 },
+      { date: d(25), who: 'Егор', from: 'Карты РФ — Егор', sent: 50000, to: 'Армянская карта', got: 490, cur: 'EUR', rate: 102.04, cb: 98.2, lossPct: 0.038, lossEur: 19, gotEur: 490 },
+      { date: d(10), who: 'Лена', from: 'Карты РФ — Лена', sent: 50000, to: 'Армянская карта', got: 505, cur: 'EUR', rate: 99.0, cb: 95.0, lossPct: 0.04, lossEur: 21, gotEur: 505 }] },
+    dict: { expense: exp, income: ['Работа / ИП', 'Преподавание танцев', 'Прочий доход'] }
+  };
+}
+function demoApply(op, sign) {
+  const ws = S.data.wallets, w = ws.find(x => x.name === op.wallet);
+  if (!w) return;
+  if (op.type === 'Расход') w.balance -= sign * op.amount;
+  else if (op.type === 'Доход') w.balance += sign * op.amount;
+  else { w.balance -= sign * op.amount; const t = ws.find(x => x.name === op.to); if (t) t.balance += sign * (op.received || conv(op.amount, op.cur, t.cur) || 0); }
+}
+
+boot();
+</script>
+</body>
+</html>
