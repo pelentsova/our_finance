@@ -95,7 +95,8 @@ nav.tabs .fab{width:56px;height:56px;margin:-30px auto 0;border-radius:28px;back
 .sw[aria-checked="true"]{background:var(--acc)}
 .sw[aria-checked="true"]::after{left:24px}
 .step{width:36px;height:36px;border-radius:12px;border:0;background:var(--s3);font-size:18px}
-.amount-in{background:transparent;border:0;outline:none;text-align:center;font-family:Unbounded,sans-serif;font-weight:700;font-size:44px;letter-spacing:-1px;min-width:0}
+.amount-in{background:transparent;border:0;outline:none;text-align:center;font-family:Unbounded,sans-serif;font-weight:700;font-size:44px;letter-spacing:-1px;min-width:0;padding:0;margin:0;-webkit-appearance:none;appearance:none;border-radius:0;box-sizing:content-box}
+.sheet.typing .sheet-f{display:none}
 .verdict{padding:10px 14px;border-radius:14px;font-size:13px;font-weight:600;display:flex;gap:8px;align-items:center}
 
 .toast{position:fixed;left:50%;bottom:calc(96px + var(--safe-b));transform:translate(-50%,20px);opacity:0;pointer-events:none;background:var(--t1);color:var(--bg);border-radius:16px;padding:12px 16px;font-size:14px;font-weight:600;display:flex;gap:14px;align-items:center;transition:all .3s;z-index:60;width:max-content;max-width:calc(100% - 32px)}
@@ -502,7 +503,7 @@ function opRow(op) {
   const e = opEur(op);
   const amount = op.amount == null ? '—' : (inc ? '+ ' : mv ? '' : '− ') + money(op.amount, op.cur);
   const sub = mv && op.received ? '→ ' + money(op.received, curOfWallet(op.to)) : (op.cur !== 'EUR' && e != null ? '≈ ' + fmt(e) + ' €' : '');
-  const meta = mv ? esc(op.wallet) + ' → ' + esc(op.to) : esc(op.cat) + ' · ' + esc(op.wallet);
+  const meta = mv ? esc(op.wallet) + ' → ' + esc(op.to) : esc(op.wallet);
   return `<div class="item"><div class="ico" style="background:${col}22;color:${col}">${mv ? '⇄' : esc((op.cat || op.type).charAt(0))}</div>
     <div class="grow"><span class="ttl">${esc(cleanTitle(op))}</span>
       <span class="meta"><span class="tag" style="background:${wt[0]};color:${wt[1]}">${esc(op.who || 'Общее')}</span>${meta}
@@ -562,6 +563,9 @@ const shiftMonth = (k, n) => { const p = k.split('-').map(Number); const d = new
 const daysInMonth = k => +monthEnd(k).slice(8);
 const overlap = (a1, b1, a2, b2) => { const a = a1 > a2 ? a1 : a2, b = b1 < b2 ? b1 : b2; return a > b ? 0 : daysBetween(a, b); };
 const monthLabel = k => MONTHS_N[+k.slice(5) - 1] + ' ' + k.slice(0, 4);
+const LIFE_START = '2026-09-20';   // с этого дня — обычная жизнь в Белграде (раньше — переезд)
+// регулярные платежи: в темпе и прогнозе не делим «на день», а берём по плану месяца
+const FIXED_CATS = ['Жильё', 'Коммуналка', 'Визаран', 'Подписки', 'Связь и интернет', 'Налоги ИП Сербия'];
 
 function opMonths() {
   const set = {};
@@ -579,7 +583,10 @@ function budgetRange() {
   else if (B.period === 'month') { const k = B.month || cm; from = monthStart(k); to = monthEnd(k); label = monthLabel(k); }
   else if (B.period === 'all') {
     const ds = (S.data.ops || []).filter(o => o.type === 'Расход').map(o => o.date).sort();
-    from = ds[0] || monthStart(cm); to = t; kind = 'range'; label = 'Всё время';
+    from = ds[0] || monthStart(cm); to = t; kind = 'all'; label = 'Всё время';
+  } else if (B.period === 'move') {
+    const ds = (S.data.ops || []).filter(o => o.type === 'Расход' && o.move).map(o => o.date).sort();
+    from = ds[0] || LIFE_START; to = ds[ds.length - 1] || t; kind = 'move'; label = 'Переезд';
   } else {
     from = B.from || monthStart(cm); to = B.to || t; if (from > to) { const x = from; from = to; to = x; }
     kind = 'range'; label = dayLabel(from).replace(/^(Сегодня|Вчера), /, '') + ' — ' + dayLabel(to).replace(/^(Сегодня|Вчера), /, '');
@@ -587,7 +594,12 @@ function budgetRange() {
   let prev;
   if (kind === 'month') { const k = shiftMonth(monthKey(from), -1); prev = { from: monthStart(k), to: monthEnd(k), label: MONTHS_N[+k.slice(5) - 1].toLowerCase() }; }
   else { const n = daysBetween(from, to); prev = { from: addDays(from, -n), to: addDays(from, -1), label: 'предыдущие ' + n + ' дн.' }; }
-  return { from, to, kind, label, prev };
+  // прошлый период начался до жизни в Белграде — сравнение «неполное»
+  prev.partial = prev.from < LIFE_START && prev.to >= LIFE_START;
+  prev.none = prev.to < LIFE_START;
+  if (prev.partial) prev.note = 'неполный: с ' + (+LIFE_START.slice(8)) + ' ' + MONTHS_G[+LIFE_START.slice(5, 7) - 1];
+  const noPlan = kind === 'all' || kind === 'move', noCompare = noPlan || prev.none;
+  return { from, to, kind, label, prev, noPlan, noCompare };
 }
 
 function catInfo() {
@@ -599,7 +611,8 @@ function catInfo() {
 function opPassesFilters(op) {
   const B = S.budget;
   if (op.type !== 'Расход') return false;
-  if (!B.move && op.move) return false;
+  if (B.period === 'move') { if (!op.move) return false; }
+  else if (!B.move && op.move) return false;
   if (B.who !== 'all' && op.who !== B.who) return false;
   if (B.wallet !== 'all' && op.wallet !== B.wallet) return false;
   return true;
@@ -621,6 +634,8 @@ function opShare(op, from, to) {
 /** План категории на период: план в месяц × доля дней каждого месяца */
 function planFor(monthly, from, to) {
   if (!monthly) return 0;
+  if (from < LIFE_START) from = LIFE_START;   // до жизни в Белграде плана не было
+  if (from > to) return 0;
   let sum = 0, k = monthKey(from);
   while (k <= monthKey(to)) { sum += monthly * overlap(monthStart(k), monthEnd(k), from, to) / daysInMonth(k); k = shiftMonth(k, 1); }
   return sum;
@@ -641,26 +656,32 @@ function budgetCalc(from, to) {
     if (!gi[g]) { gi[g] = { name: g, plan: 0, fact: 0, cats: [] }; groups.push(gi[g]); }
     gi[g].cats.push(c); gi[g].plan += c.plan; gi[g].fact += c.fact;
   });
-  const inB = groups.filter(g => g.name !== 'Вне бюджета'), out = gi['Вне бюджета'] || { fact: 0, cats: [] };
+  const all = S.budget.period === 'move';   // в режиме «Переезд» показываем все категории вместе
+  const inB = all ? groups : groups.filter(g => g.name !== 'Вне бюджета'), out = all ? { fact: 0, cats: [] } : (gi['Вне бюджета'] || { fact: 0, cats: [] });
   return { groups: inB, outside: out, cats, plan: inB.reduce((a, g) => a + g.plan, 0), fact: inB.reduce((a, g) => a + g.fact, 0) };
 }
 
 const pctChange = (now, before) => before > 0.5 ? (now / before - 1) * 100 : null;
+let CMP = { off: false, partial: false };   // как сравнивать с прошлым периодом (ставит renderBudget)
 function chgTag(now, before) {
+  if (CMP.off) return '';
   const p = pctChange(now, before);
   if (p == null || Math.abs(p) < 1) return '';
   const up = p > 0;
+  if (CMP.partial) return `<span class="pill" title="Прошлый период неполный" style="background:var(--s3);color:var(--t3)">${up ? '▲' : '▼'} ${fmt(Math.abs(p), 0)}%*</span>`;
   return `<span class="pill" style="background:${up ? 'rgba(255,138,101,.14)' : 'rgba(91,227,166,.14)'};color:${up ? 'var(--exp)' : 'var(--inc)'}">${up ? '▲' : '▼'} ${fmt(Math.abs(p), 0)}%</span>`;
 }
 
 function renderBudget() {
   const el = $('#s-budget'), B = S.budget, D = S.data;
   const R0 = budgetRange(), cur = budgetCalc(R0.from, R0.to), prev = budgetCalc(R0.prev.from, R0.prev.to);
-  const plan = cur.plan, spent = cur.fact, diff = spent - plan;
+  CMP = { off: R0.noCompare, partial: R0.prev.partial };
+  const plan = R0.noPlan ? 0 : cur.plan, spent = cur.fact, diff = spent - plan;
+  if (R0.noPlan) { cur.groups.forEach(g => { g.plan = 0; g.cats.forEach(c => { c.plan = 0; }); }); }
   const t = todayISO();
 
   // донат по группам
-  const base = Math.max(spent, plan) || 1, C2 = 2 * Math.PI * 80;
+  const base = (R0.noPlan ? spent : Math.max(spent, plan)) || 1, C2 = 2 * Math.PI * 80;
   let acc = 0;
   const segs = cur.groups.map((g, i) => {
     const len = Math.max(0, g.fact / base * C2 - 14), off = -acc - 7; acc += g.fact / base * C2;
@@ -669,37 +690,42 @@ function renderBudget() {
 
   // темп и прогноз — если период идёт сейчас
   let pace = '';
-  if (R0.from <= t && t <= R0.to && B.period !== 'all') {
-    const passed = daysBetween(R0.from, t), total = daysBetween(R0.from, R0.to);
-    const perDay = spent / passed, forecast = perDay * total, left = plan - spent, daysLeft = total - passed + 1;
+  if (R0.from <= t && t <= R0.to && !R0.noPlan) {
+    const passed = daysBetween(R0.from, t), total = daysBetween(R0.from, R0.to), daysLeft = total - passed + 1;
+    // регулярные платежи — по факту, но не меньше плана; остальное — по темпу
+    let fixedFact = 0, fixedPlan = 0;
+    FIXED_CATS.forEach(n => { const c = cur.cats[n]; if (c) { fixedFact += c.fact; fixedPlan += c.plan; } });
+    const fixedExp = Math.max(fixedFact, fixedPlan), varSpent = spent - fixedFact;
+    const perDay = varSpent / passed, forecast = fixedExp + perDay * total, varLeft = plan - fixedExp - varSpent;
     const bad = forecast > plan * 1.02;
     pace = `<div class="card" style="gap:10px"><span class="card-t">Темп</span>
-      <div class="between" style="font-size:13px"><span class="muted">Тратите в день</span><span class="num" style="font-weight:600">${fmt(perDay)} €</span></div>
+      <div class="between" style="font-size:13px"><span class="muted">Тратите в день*</span><span class="num" style="font-weight:600">${fmt(perDay)} €</span></div>
       <div class="between" style="font-size:13px"><span class="muted">Если так же — к концу периода</span><span class="num" style="font-weight:700;color:${bad ? 'var(--exp)' : 'var(--inc)'}">${fmt(forecast, 0)} €</span></div>
-      ${left > 0 ? `<div class="between" style="font-size:13px"><span class="muted">Чтобы уложиться, можно в день</span><span class="num" style="font-weight:600">${fmt(left / daysLeft)} €</span></div>` : ''}
+      ${varLeft > 0 ? `<div class="between" style="font-size:13px"><span class="muted">Чтобы уложиться, можно в день*</span><span class="num" style="font-weight:600">${fmt(varLeft / daysLeft)} €</span></div>` : ''}
+      <span class="muted" style="font-size:11px">* без регулярных платежей (жильё, коммуналка, визаран, связь, подписки, налоги ИП) — они в прогнозе по плану: ${fmt(fixedExp, 0)} €</span>
       <div class="verdict" style="background:${bad ? 'rgba(255,138,101,.12);color:#FFB199' : 'rgba(91,227,166,.12);color:var(--inc)'}">${bad ? 'По прогнозу выйдете за план на ' + fmt(forecast - plan, 0) + ' €' : 'По прогнозу укладываетесь в план'}</div></div>`;
   }
 
   // группы и категории
-  const gHtml = cur.groups.map((g, i) => {
-    const f = g.fact, p = g.plan, over = p ? f > p : f > 0, open = B.open === g.name, col = GROUP_COL[i % GROUP_COL.length];
+  const gHtml = cur.groups.filter(g => !R0.noPlan || g.fact > 0.004).map((g, i) => {
+    const f = g.fact, p = g.plan, over = R0.noPlan ? false : p ? f > p : f > 0, open = B.open === g.name, col = GROUP_COL[i % GROUP_COL.length];
     const pg = prev.groups.find(x => x.name === g.name), pf = pg ? pg.fact : 0;
-    const inW = over && p ? (p / f * 100) : (p ? f / p * 100 : (f ? 100 : 0));
-    const cats = g.cats.filter(c => c.fact > 0.004 || c.plan > 0.004).map(c => {
-      const o = c.plan ? c.fact > c.plan : c.fact > 0, pc = prev.cats[c.name] ? prev.cats[c.name].fact : 0;
+    const inW = R0.noPlan ? (spent ? f / spent * 100 : 0) : over && p ? (p / f * 100) : (p ? f / p * 100 : (f ? 100 : 0));
+    const cats = g.cats.filter(c => c.fact > 0.004 || (!R0.noPlan && c.plan > 0.004)).sort((a, b) => R0.noPlan ? b.fact - a.fact : 0).map(c => {
+      const o = R0.noPlan ? false : c.plan ? c.fact > c.plan : c.fact > 0, pc = prev.cats[c.name] ? prev.cats[c.name].fact : 0;
       return `<button data-act="openCat" data-v="${esc(c.name)}" class="between" style="width:100%;background:none;border:0;border-top:1px solid var(--line);padding:10px 0;font-size:13px;text-align:left">
         <span style="flex:1;color:var(--t2)">${esc(c.name)}</span>${chgTag(c.fact, pc)}
-        <span style="font-weight:700;color:${o ? 'var(--exp)' : 'var(--t1)'};margin-left:6px">${fmt(c.fact)} €</span><span style="width:56px;text-align:right" class="muted">${c.plan ? fmt(c.plan, 0) + ' €' : '—'}</span>
+        <span style="font-weight:700;color:${o ? 'var(--exp)' : 'var(--t1)'};margin-left:6px">${fmt(c.fact)} €</span>${R0.noPlan ? '' : `<span style="width:56px;text-align:right" class="muted">${c.plan ? fmt(c.plan, 0) + ' €' : '—'}</span>`}
         <span aria-hidden="true" style="color:var(--t3);margin-left:4px">›</span></button>`;
     }).join('');
     return `<div style="background:var(--s1);border:1px solid var(--line);border-radius:20px;overflow:hidden">
       <button data-act="bGroup" data-v="${esc(g.name)}" aria-expanded="${open}" style="width:100%;background:none;border:0;padding:14px 16px;display:flex;flex-direction:column;gap:10px;text-align:left">
         <div class="row" style="width:100%"><span aria-hidden="true" style="width:10px;height:10px;border-radius:5px;background:${col};flex:none"></span>
           <span style="flex:1;font-size:15px;font-weight:700">${esc(g.name)}</span>${chgTag(f, pf)}<span class="num" style="font-weight:600;font-size:13px">${fmt(f)} €</span>
-          <span style="font-size:12px" class="muted">/ ${fmt(p, 0)} €</span>
+          ${R0.noPlan ? '' : `<span style="font-size:12px" class="muted">/ ${fmt(p, 0)} €</span>`}
           <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .25s;transform:rotate(${open ? 180 : 0}deg)"><path d="M6 9l6 6 6-6"/></svg></div>
         <div class="bar" style="width:100%"><i data-w="${Math.min(100, inW)}" style="background:${col}"></i>${over && p ? `<i data-w="${100 - inW}" data-l="${inW}" style="background:var(--exp);border-radius:0"></i>` : ''}</div>
-        <span style="font-size:12px;font-weight:600;color:${over ? 'var(--exp)' : 'var(--t3)'}">${p ? (over ? 'Сверх плана на ' + fmt(f - p) + ' € · ' : 'Осталось ' + fmt(p - f) + ' € · ') + Math.round(f / p * 100) + '%' : 'Без плана'}</span>
+        <span style="font-size:12px;font-weight:600;color:${over && !R0.noPlan ? 'var(--exp)' : 'var(--t3)'}">${R0.noPlan ? (spent ? Math.round(f / spent * 100) + '% от всех трат' : '') : p ? (over ? 'Сверх плана на ' + fmt(f - p) + ' € · ' : 'Осталось ' + fmt(p - f) + ' € · ') + Math.round(f / p * 100) + '%' : 'Без плана'}</span>
       </button>
       ${open ? `<div style="padding:0 16px 8px;display:flex;flex-direction:column;animation:rise .3s both">${cats || '<span class="muted" style="font-size:13px;padding:8px 0">Трат нет</span>'}</div>` : ''}
     </div>`;
@@ -723,7 +749,7 @@ function renderBudget() {
 
   el.innerHTML = `
     <header class="between"><h1 class="h1">Бюджет</h1><span style="font-size:13px" class="muted">${esc(R0.label)}</span></header>
-    <div class="chips" role="group" aria-label="Период">${[['this', 'Этот месяц'], ['prev', 'Прошлый'], ['month', 'Месяц…'], ['range', 'Свои даты'], ['all', 'Всё время']]
+    <div class="chips" role="group" aria-label="Период">${[['this', 'Этот месяц'], ['prev', 'Прошлый'], ['month', 'Месяц…'], ['range', 'Свои даты'], ['all', 'Всё время'], ['move', 'Переезд']]
       .map(x => `<button class="chip ${B.period === x[0] ? 'on' : ''}" data-act="bPeriod" data-v="${x[0]}">${x[1]}</button>`).join('')}</div>
     ${B.period === 'month' ? `<label class="row" style="height:48px;border-radius:16px;background:var(--s1);border:1px solid var(--line2);padding:0 14px"><span class="muted" style="font-size:13px">Месяц</span>
       <select id="b-month" style="flex:1;background:none;border:0;color:var(--t1);font-size:14px;font-weight:600;outline:none;text-align:right;color-scheme:dark">${months.map(k => `<option value="${k}" ${k === (B.month || months[0]) ? 'selected' : ''}>${monthLabel(k)}</option>`).join('')}</select></label>` : ''}
@@ -735,8 +761,8 @@ function renderBudget() {
       <div style="display:flex;flex-direction:column;gap:12px;margin-top:12px">
         <div class="seg soft" role="group" aria-label="Кто">${[['all', 'Все'], ['Общее', 'Общее'], ['Лена', 'Лена'], ['Егор', 'Егор']].map(x => `<button class="${B.who === x[0] ? 'on' : ''}" data-act="bWho" data-v="${x[0]}">${x[1]}</button>`).join('')}</div>
         <div class="wrap">${[['all', 'Все кошельки']].concat(wallets.map(w => [w, w])).map(x => `<button class="chip sm ${B.wallet === x[0] ? 'on' : ''}" data-act="bWallet" data-v="${esc(x[0])}">${esc(x[1])}</button>`).join('')}</div>
-        <div class="row"><div class="grow"><span style="font-size:14px;font-weight:600">Учитывать переезд</span><span style="font-size:12px" class="muted">Траты с отметкой «Переезд»</span></div>
-          <button class="sw" role="switch" aria-checked="${B.move}" aria-label="Учитывать переезд" data-act="bMove"></button></div>
+        ${B.period === 'move' ? '' : `<div class="row"><div class="grow"><span style="font-size:14px;font-weight:600">Учитывать переезд</span><span style="font-size:12px" class="muted">Траты с отметкой «Переезд»</span></div>
+          <button class="sw" role="switch" aria-checked="${B.move}" aria-label="Учитывать переезд" data-act="bMove"></button></div>`}
       </div>
     </details>
     <div class="card" style="align-items:center;padding:20px">
@@ -745,13 +771,14 @@ function renderBudget() {
           <circle cx="105" cy="105" r="80" fill="none" stroke="#23272E" stroke-width="20"></circle>${segs}</svg>
         <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px">
           <span style="font-size:12px" class="muted">Потрачено</span><span class="num" style="font-weight:700;font-size:23px">${cnt(spent, 2, ' €')}</span>
-          <span style="font-size:12px" class="muted">план ${fmt(plan, 0)} €</span></div>
+          ${R0.noPlan ? `<span style="font-size:12px" class="muted">${R0.kind === 'move' ? 'на переезд' : 'без плана'}</span>` : `<span style="font-size:12px" class="muted">план ${fmt(plan, 0)} €</span>`}</div>
       </div>
-      <span style="height:32px;padding:0 14px;border-radius:16px;display:flex;align-items:center;font-size:13px;font-weight:700;${diff > 0 ? 'background:rgba(255,138,101,.14);color:var(--exp)' : 'background:rgba(91,227,166,.14);color:var(--inc)'}">${diff > 0 ? 'Перерасход ' + fmt(diff) + ' €' : 'Осталось ' + fmt(-diff) + ' €'}</span>
-      <span style="font-size:12px" class="muted">${prev.fact > 0.5 ? 'За ' + esc(R0.prev.label) + ': ' + fmt(prev.fact) + ' € ' : ''}${chgTag(spent, prev.fact)}</span>
+      ${R0.noPlan ? (R0.kind === 'move' ? `<span style="font-size:12px;text-align:center" class="muted">Все траты с отметкой «Переезд»: ${dayLabel(R0.from).replace(/^(Сегодня|Вчера), /, '')} — ${dayLabel(R0.to).replace(/^(Сегодня|Вчера), /, '')}${B.who !== 'all' || B.wallet !== 'all' ? ' · с фильтрами' : ''}</span>` : '')
+        : `<span style="height:32px;padding:0 14px;border-radius:16px;display:flex;align-items:center;font-size:13px;font-weight:700;${diff > 0 ? 'background:rgba(255,138,101,.14);color:var(--exp)' : 'background:rgba(91,227,166,.14);color:var(--inc)'}">${diff > 0 ? 'Перерасход ' + fmt(diff) + ' €' : 'Осталось ' + fmt(-diff) + ' €'}</span>`}
+      ${R0.noCompare ? '' : `<span style="font-size:12px;text-align:center" class="muted">${prev.fact > 0.5 ? 'За ' + esc(R0.prev.label) + (R0.prev.partial ? ' (' + esc(R0.prev.note) + ')' : '') + ': ' + fmt(prev.fact) + ' € ' : ''}${chgTag(spent, prev.fact)}</span>`}
     </div>
     ${pace}
-    <div style="display:flex;flex-direction:column;gap:10px"><div class="between"><span class="card-t">Группы · план и факт</span><span class="muted" style="font-size:11px">▲▼ — к прошлому периоду</span></div>${gHtml}</div>
+    <div style="display:flex;flex-direction:column;gap:10px"><div class="between"><span class="card-t">${R0.kind === 'move' ? 'На что ушло' : R0.noPlan ? 'Группы' : 'Группы · план и факт'}</span><span class="muted" style="font-size:11px">${R0.noCompare ? '' : '▲▼ — к прошлому периоду' + (R0.prev.partial ? ' · * неполный' : '')}</span></div>${gHtml}</div>
     ${oCats.length ? `<div class="card"><div class="between"><span class="card-t">Вне бюджета</span><span class="num" style="font-weight:600;font-size:15px">${fmt(O.fact)} €</span></div>
       <span style="font-size:12px" class="muted">Поездки, подарки, платежи и налоги в РФ — не входят в план</span>
       ${oCats.map(c => `<button data-act="openCat" data-v="${esc(c.name)}" style="background:none;border:0;padding:0;text-align:left;display:flex;flex-direction:column;gap:6px"><div class="between" style="font-size:13px;width:100%"><span style="color:var(--t2)">${esc(c.name)} ›</span><span style="font-weight:700">${fmt(c.fact)} €</span></div>
@@ -772,7 +799,8 @@ function renderCat() {
   const inPeriod = (S.data.ops || []).filter(op => op.cat === name && opPassesFilters(op) && opShare(op, R0.from, R0.to) > 0);
   const total = inPeriod.reduce((a, op) => a + opShare(op, R0.from, R0.to), 0);
   const prevTotal = (S.data.ops || []).filter(op => op.cat === name && opPassesFilters(op)).reduce((a, op) => a + opShare(op, R0.prev.from, R0.prev.to), 0);
-  const plan = planFor(C.plan, R0.from, R0.to);
+  const plan = R0.noPlan ? 0 : planFor(C.plan, R0.from, R0.to);
+  CMP = { off: R0.noCompare, partial: R0.prev.partial };
   // по месяцам: последние 6
   const cm = monthKey(todayISO()), ks = [];
   for (let i = 5; i >= 0; i--) ks.push(shiftMonth(cm, -i));
@@ -783,7 +811,7 @@ function renderCat() {
       <div style="width:100%;height:90px;display:flex;align-items:flex-end;position:relative">
         <div style="width:100%;height:${mv[i] / mx * 100}%;min-height:${mv[i] ? 3 : 0}px;border-radius:6px;background:${C.plan && mv[i] > C.plan ? 'var(--exp)' : 'var(--acc)'}"></div></div>
       <span style="font-size:11px" class="muted">${MONTHS_S[+k.slice(5) - 1]}</span></div>`).join('');
-  const planLine = C.plan ? `<span style="font-size:11px" class="muted">План ${fmt(C.plan, 0)} € в месяц${mv.some(v => v > C.plan) ? ' · красным — сверх плана' : ''}</span>` : '';
+  const planLine = C.plan && !R0.noPlan ? `<span style="font-size:11px" class="muted">План ${fmt(C.plan, 0)} € в месяц${mv.some(v => v > C.plan) ? ' · красным — сверх плана' : ''}</span>` : '';
 
   const body = $('#cat-body');
   const first = !body.dataset.ready || body.dataset.cat !== name;
@@ -801,7 +829,7 @@ function renderCat() {
       <div class="between" style="align-items:baseline"><span class="num" style="font-weight:700;font-size:26px">${fmt(total)} €</span>${plan ? `<span class="muted" style="font-size:13px">план ${fmt(plan, 0)} €</span>` : ''}</div>
       ${plan ? `<div class="bar"><i data-w="${Math.min(100, total / plan * 100)}" style="background:${total > plan ? 'var(--exp)' : 'var(--acc)'}"></i></div>` : ''}
       <div class="between" style="font-size:12px"><span class="muted">${inPeriod.length} ${plural(inPeriod.length, 'трата', 'траты', 'трат')}</span>
-        <span class="muted">${prevTotal > 0.5 ? 'за ' + esc(R0.prev.label) + ' ' + fmt(prevTotal) + ' € ' : ''}${chgTag(total, prevTotal)}</span></div></div>
+        <span class="muted">${!R0.noCompare && prevTotal > 0.5 ? 'за ' + esc(R0.prev.label) + (R0.prev.partial ? '*' : '') + ' ' + fmt(prevTotal) + ' € ' : ''}${chgTag(total, prevTotal)}</span></div></div>
     <div class="card" style="gap:10px"><span class="card-t">По месяцам</span><div class="row" style="align-items:flex-end;gap:8px">${bars}</div>${planLine}</div>`;
   animate($('#cat-top'));
   renderCatList(inPeriod, R0);
@@ -943,9 +971,10 @@ function openAdd() {
   const ws = S.data.wallets || [];
   let lastW = null; try { lastW = localStorage.getItem('lastWallet'); } catch (e) {}
   const me = (S.me && S.me.name) || 'Общее';
-  S.add = { type: 'Расход', who: 'Общее', wallet: ws.some(w => w.name === lastW) ? lastW : (ws[0] && ws[0].name), to: '', amount: '', received: '', cat: '', move: false, check: false, spread: 1, comment: '' };
+  S.add = { type: 'Расход', who: 'Общее', wallet: ws.some(w => w.name === lastW) ? lastW : (ws.find(w => w.name === 'Наличные RSD') || ws.find(w => w.cur === 'RSD') || ws[0] || {}).name, to: '', amount: '', received: '', cat: '', move: false, check: false, spread: 1, comment: '' };
   $('#a-date').value = todayISO();
   renderAdd();
+  setTimeout(() => sizeAmount($('#a-amount')), 400);
   $('#sh-add').classList.add('open');
   tg && tg.BackButton && tg.BackButton.show();
   setTimeout(() => { const i = $('#a-amount'); i && i.focus(); }, 380);
@@ -954,6 +983,22 @@ function closeAdd() { $('#sh-add').classList.remove('open'); syncBack(); }
 function syncBack() { if (!tg || !tg.BackButton) return; if (document.querySelector('.sheet.open')) tg.BackButton.show(); else tg.BackButton.hide(); }
 function closeTop() { const o = document.querySelectorAll('.sheet.open'); if (o.length) { o[o.length - 1].classList.remove('open'); syncBack(); } }
 const fitW = v => Math.min(9, Math.max(1, String(v || '0').length)) * 0.82 + 0.4 + 'em';
+/** Ширина поля суммы — по реальной ширине текста в этом шрифте; если не влезает в строку — шрифт меньше. */
+const _mc = document.createElement('canvas').getContext('2d');
+function sizeAmount(inp) {
+  if (!inp) return;
+  const row = inp.parentElement, cs = getComputedStyle(inp);
+  let avail = row.clientWidth;
+  [...row.children].forEach(ch => { if (ch !== inp) avail -= ch.getBoundingClientRect().width; });
+  avail -= 24;                                          // промежутки и курсор
+  const text = inp.value || inp.placeholder || '0';
+  const measure = fs => { _mc.font = cs.fontWeight + ' ' + fs + 'px ' + cs.fontFamily; return _mc.measureText(text).width - text.length + 6; };
+  let fs = 44, w = measure(fs);
+  if (w > avail) { fs = Math.max(18, Math.floor(44 * avail / w)); w = measure(fs); }
+  inp.style.fontSize = fs + 'px';
+  inp.style.width = Math.ceil(Math.min(w, Math.max(avail, 40))) + 'px';
+}
+try { document.fonts && document.fonts.ready.then(() => document.querySelectorAll('.amount-in').forEach(sizeAmount)); } catch (e) {}
 const parseNum = s => { const v = parseFloat(String(s || '').replace(',', '.').replace(/\s/g, '')); return isFinite(v) ? v : 0; };
 
 function renderAdd() {
@@ -982,7 +1027,7 @@ function renderAdd() {
       <span class="lbl">${A.type === 'Перевод' ? 'Отправлено' : 'Сумма'}</span>
       <div class="row" style="align-items:baseline;justify-content:center;gap:6px;width:100%">
         <span class="num" style="font-weight:700;font-size:38px;color:${color}">${A.type === 'Доход' ? '+' : A.type === 'Расход' ? '−' : ''}</span>
-        <input id="a-amount" class="amount-in" inputmode="decimal" placeholder="0" value="${esc(A.amount)}" style="color:${color};width:${fitW(A.amount)}">
+        <input id="a-amount" class="amount-in" inputmode="decimal" placeholder="0" value="${esc(A.amount)}" style="color:${color}">
         <span class="num muted" style="font-size:20px">${esc(SYM[cur] || cur)}</span></div>
       <span id="a-calc" class="muted" style="font-size:13px;min-height:18px;text-align:center"></span>
     </label>
@@ -1010,7 +1055,8 @@ function renderAdd() {
     <label style="display:flex;flex-direction:column;gap:8px"><span class="lbl">Комментарий</span>
       <input id="a-comment" class="field" placeholder="Например: Пекарня" value="${esc(A.comment)}"></label>
     <div id="a-err"></div>`;
-  $('#a-amount').addEventListener('input', e => { A.amount = e.target.value; e.target.style.width = fitW(A.amount); addCalc(); });
+  $('#a-amount').addEventListener('input', e => { A.amount = e.target.value; sizeAmount(e.target); addCalc(); });
+  sizeAmount($('#a-amount'));
   $('#a-comment').addEventListener('input', e => { A.comment = e.target.value; });
   const rv = $('#a-recv'); if (rv) rv.addEventListener('input', e => { A.received = e.target.value; addCalc(); });
   addCalc();
@@ -1040,6 +1086,12 @@ function addCalc() {
   }
   box.innerHTML = html;
 }
+
+(function () {
+  const sh = document.getElementById('sh-add');
+  sh.addEventListener('focusin', e => { if (e.target.matches('input:not([type=date])')) sh.classList.add('typing'); });
+  sh.addEventListener('focusout', () => setTimeout(() => { if (!sh.contains(document.activeElement) || !document.activeElement.matches('input:not([type=date])')) sh.classList.remove('typing'); }, 50));
+})();
 
 async function saveAdd() {
   if (S.busy) return;
@@ -1105,7 +1157,7 @@ function renderConv() {
   $('#conv-body').innerHTML = `
     <div class="chips" role="group" aria-label="Из какой валюты">${list.map(c => `<button class="chip ${C.cur === c ? 'on' : ''}" data-act="convCur" data-v="${c}">${esc(SYM[c] || '')} ${c}</button>`).join('')}</div>
     <label style="display:flex;flex-direction:column;align-items:center;gap:6px"><span class="lbl">Сумма</span>
-      <div class="row" style="align-items:baseline;justify-content:center;gap:8px;width:100%"><input id="c-amount" class="amount-in" inputmode="decimal" value="${esc(C.amount)}" style="color:var(--acc);width:${fitW(C.amount)}"><span class="num muted" style="font-size:20px">${esc(SYM[C.cur] || C.cur)}</span></div></label>
+      <div class="row" style="align-items:baseline;justify-content:center;gap:8px;width:100%"><input id="c-amount" class="amount-in" inputmode="decimal" value="${esc(C.amount)}" style="color:var(--acc)"><span class="num muted" style="font-size:20px">${esc(SYM[C.cur] || C.cur)}</span></div></label>
     <div class="list" id="c-list"></div>
     <span class="muted" style="font-size:11px">${esc(((S.rates && S.rates.sources) || []).join(' · '))}. Рубль — по официальному курсу ЦБ, остальные — рыночный курс. В обменниках и банках курс хуже на 1–5%.</span>`;
   const draw = () => {
@@ -1117,7 +1169,8 @@ function renderConv() {
         <span class="num" style="font-size:15px;font-weight:600">${v == null ? '—' : fmt(v, v >= 1000 ? 0 : 2)}</span></div>`;
     }).join('');
   };
-  $('#c-amount').addEventListener('input', e => { C.amount = e.target.value; e.target.style.width = fitW(C.amount); draw(); });
+  $('#c-amount').addEventListener('input', e => { C.amount = e.target.value; sizeAmount(e.target); draw(); });
+  sizeAmount($('#c-amount'));
   draw();
 }
 
@@ -1227,7 +1280,12 @@ function demoData() {
       { row: 3, date: d(1), type: 'Доход', who: 'Егор', wallet: 'Карты РФ — Егор', amount: 15000, cur: 'RUB', cat: 'Работа / ИП', comment: 'Монтаж ролика' },
       { row: 4, date: d(1), type: 'Расход', who: 'Лена', wallet: 'Наличные RSD', amount: 2500, cur: 'RSD', cat: 'Танцы', comment: 'Аренда зала' },
       { row: 5, date: d(2), type: 'Перевод', who: 'Общее', wallet: 'Наличные EUR', amount: 100, cur: 'EUR', to: 'Наличные RSD', received: 11650, comment: 'Обмен' },
-      { row: 6, date: d(3), type: 'Расход', who: 'Общее', wallet: 'Карты РФ — Лена', amount: 1200, cur: 'RUB', cat: 'Такси', comment: '' }],
+      { row: 6, date: d(3), type: 'Расход', who: 'Общее', wallet: 'Карты РФ — Лена', amount: 1200, cur: 'RUB', cat: 'Такси', comment: '' },
+      { row: 7, date: d(45), type: 'Расход', who: 'Общее', wallet: 'Наличные EUR', amount: 500, cur: 'EUR', cat: 'Документы и ВНЖ', comment: 'Юрист', move: true },
+      { row: 8, date: d(60), type: 'Расход', who: 'Общее', wallet: 'Армянская карта', amount: 900, cur: 'EUR', cat: 'Билеты и дорога', comment: 'Билеты на двоих', move: true },
+      { row: 9, date: d(38), type: 'Расход', who: 'Общее', wallet: 'Армянская карта', amount: 455, cur: 'EUR', cat: 'Жильё', comment: 'Аренда на 10 дней', move: true },
+      { row: 10, date: d(36), type: 'Расход', who: 'Общее', wallet: 'Наличные RSD', amount: 9000, cur: 'RSD', cat: 'Продукты', comment: 'Первая закупка' },
+      { row: 11, date: d(32), type: 'Расход', who: 'Общее', wallet: 'Армянская карта', amount: 30, cur: 'EUR', cat: 'Кафе и рестораны', comment: 'ДоДо' }],
     rf: { rows: [
       { date: d(40), who: 'Общее', from: 'Общий счёт РФ', sent: 100000, to: 'Армянская карта', got: 960, cur: 'EUR', rate: 104.17, cb: 100.1, lossPct: 0.039, lossEur: 39, gotEur: 960 },
       { date: d(25), who: 'Егор', from: 'Карты РФ — Егор', sent: 50000, to: 'Армянская карта', got: 490, cur: 'EUR', rate: 102.04, cb: 98.2, lossPct: 0.038, lossEur: 19, gotEur: 490 },
