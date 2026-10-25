@@ -146,6 +146,16 @@ nav.tabs .fab{width:56px;height:56px;margin:-30px auto 0;border-radius:28px;back
   <div class="sheet-f"><button class="btn" id="a-save" data-act="save">Сохранить в таблицу</button></div>
 </div>
 
+<!-- КАТЕГОРИЯ -->
+<div class="sheet" id="sh-cat" role="dialog" aria-modal="true" aria-label="Категория">
+  <div class="sheet-h">
+    <button class="iconbtn" data-act="closeCat" aria-label="Закрыть"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    <span style="font-size:16px;font-weight:700" id="cat-title">Категория</span>
+    <div style="width:44px"></div>
+  </div>
+  <div class="sheet-b" id="cat-body"></div>
+</div>
+
 <!-- КОНВЕРТЕР -->
 <div class="sheet" id="sh-conv" role="dialog" aria-modal="true" aria-label="Конвертер валют">
   <div class="sheet-h">
@@ -207,7 +217,8 @@ const S = {
   data: null, rates: null, me: null, screen: 'home',
   home: { cur: 'EUR', wcur: 'all' },
   ops: { type: 'all', who: 'all', q: '', limit: 60 },
-  budget: { m: null, open: null },
+  budget: { m: null, open: null, period: 'this', month: null, from: '', to: '', who: 'all', wallet: 'all', move: false },
+  cat: { name: null, q: '' },
   rf: { who: 'all', rub: 100000 },
   conv: { amount: '100', cur: 'EUR' },
   add: null, lastRow: null, busy: false
@@ -368,7 +379,7 @@ function renderHome() {
       <div class="between"><span class="cb" style="background:${c}24;color:${c}">${esc(SYM[w.cur] || w.cur)}</span><span style="font-size:11px;font-weight:600" class="muted">${esc(w.owner)}</span></div>
       <div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:13px;font-weight:600;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(w.name)}</span>
       <span class="num" style="font-weight:600;font-size:17px">${cnt(w.balance, w.cur === 'EUR' ? 2 : 0, ' ' + (SYM[w.cur] || w.cur))}</span>
-      <span style="font-size:11px" class="muted">${w.cur === 'EUR' ? 'основная валюта' : '≈ ' + fmt(e, 0) + ' €'}</span></div></div>`;
+      <span style="font-size:11px" class="muted">${w.cur === 'EUR' ? '&nbsp;' : '≈ ' + fmt(e, 0) + ' €'}</span></div></div>`;
   }).join('');
 
   const recent = (D.ops || []).slice(0, 5).map(opRow).join('');
@@ -518,75 +529,271 @@ function renderOps() {
 }
 
 /* ================= БЮДЖЕТ ================= */
-function renderBudget() {
-  const el = $('#s-budget'), B = S.data.budget || {}, months = B.months || [];
-  if (!months.length) { el.innerHTML = '<h1 class="h1">Бюджет</h1><div class="err">Не нашёл таблицу на листе «По месяцам».</div>'; return; }
-  const mi = Math.min(S.budget.m, months.length - 1), mLabel = months[mi];
-  const groups = B.groups || [];
-  const plan = (B.total && B.total.plan) || groups.reduce((a, g) => a + g.plan, 0);
-  const facts = groups.map(g => g.fact[mi] || 0);
-  const spent = B.total ? B.total.fact[mi] : facts.reduce((a, b) => a + b, 0);
-  const base = Math.max(spent, plan), C = 2 * Math.PI * 80;
-  let acc = 0;
-  const segs = facts.map((f, i) => {
-    const len = Math.max(0, f / base * C - 14), off = -acc - 7; acc += f / base * C;
-    return f > 0 ? `<circle cx="105" cy="105" r="80" fill="none" stroke="${GROUP_COL[i % GROUP_COL.length]}" stroke-width="20" stroke-linecap="round" style="stroke-dasharray:0 ${C};stroke-dashoffset:${off};transition:stroke-dasharray 1s ${0.1 + i * 0.08}s cubic-bezier(.2,.8,.2,1)" data-dash="${len} ${C}"></circle>` : '';
-  }).join('');
-  const diff = spent - plan;
+const MONTHS_N = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+const MONTHS_S = ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
+const iso = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+const fromIso = s => { const p = s.split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); };
+const addDays = (s, n) => { const d = fromIso(s); d.setDate(d.getDate() + n); return iso(d); };
+const daysBetween = (a, b) => Math.round((fromIso(b) - fromIso(a)) / 864e5) + 1;
+const monthKey = s => s.slice(0, 7);
+const monthStart = k => k + '-01';
+const monthEnd = k => { const p = k.split('-').map(Number); return iso(new Date(p[0], p[1], 0)); };
+const shiftMonth = (k, n) => { const p = k.split('-').map(Number); const d = new Date(p[0], p[1] - 1 + n, 1); return iso(d).slice(0, 7); };
+const daysInMonth = k => +monthEnd(k).slice(8);
+const overlap = (a1, b1, a2, b2) => { const a = a1 > a2 ? a1 : a2, b = b1 < b2 ? b1 : b2; return a > b ? 0 : daysBetween(a, b); };
+const monthLabel = k => MONTHS_N[+k.slice(5) - 1] + ' ' + k.slice(0, 4);
 
-  const gHtml = groups.map((g, i) => {
-    const f = g.fact[mi] || 0, p = g.plan || 0, over = f > p, open = S.budget.open === g.name;
-    const col = GROUP_COL[i % GROUP_COL.length];
-    const inW = over ? (p / f * 100) : (p ? f / p * 100 : 0);
-    const cats = g.cats.map(c => {
-      const v = c.fact[mi] || 0, o = c.plan ? v > c.plan : v > 0;
-      return `<div class="between" style="padding:9px 0;border-top:1px solid var(--line);font-size:13px"><span style="flex:1;color:var(--t2)">${esc(c.name)}</span>
-        <span style="font-weight:700;color:${o ? 'var(--exp)' : 'var(--t1)'}">${fmt(v)} €</span><span style="width:60px;text-align:right" class="muted">${c.plan ? fmt(c.plan, 0) + ' €' : '—'}</span></div>`;
+function opMonths() {
+  const set = {};
+  (S.data.ops || []).forEach(o => { if (o.type === 'Расход' && o.date) set[monthKey(o.date)] = 1; });
+  set[monthKey(todayISO())] = 1;
+  return Object.keys(set).sort().reverse();
+}
+
+/** Выбранный период → { from, to, kind, label, prev:{from,to} } */
+function budgetRange() {
+  const B = S.budget, t = todayISO(), cm = monthKey(t);
+  let from, to, kind = 'month', label;
+  if (B.period === 'this') { from = monthStart(cm); to = monthEnd(cm); label = monthLabel(cm); }
+  else if (B.period === 'prev') { const k = shiftMonth(cm, -1); from = monthStart(k); to = monthEnd(k); label = monthLabel(k); }
+  else if (B.period === 'month') { const k = B.month || cm; from = monthStart(k); to = monthEnd(k); label = monthLabel(k); }
+  else if (B.period === 'all') {
+    const ds = (S.data.ops || []).filter(o => o.type === 'Расход').map(o => o.date).sort();
+    from = ds[0] || monthStart(cm); to = t; kind = 'range'; label = 'Всё время';
+  } else {
+    from = B.from || monthStart(cm); to = B.to || t; if (from > to) { const x = from; from = to; to = x; }
+    kind = 'range'; label = dayLabel(from).replace(/^(Сегодня|Вчера), /, '') + ' — ' + dayLabel(to).replace(/^(Сегодня|Вчера), /, '');
+  }
+  let prev;
+  if (kind === 'month') { const k = shiftMonth(monthKey(from), -1); prev = { from: monthStart(k), to: monthEnd(k), label: MONTHS_N[+k.slice(5) - 1].toLowerCase() }; }
+  else { const n = daysBetween(from, to); prev = { from: addDays(from, -n), to: addDays(from, -1), label: 'предыдущие ' + n + ' дн.' }; }
+  return { from, to, kind, label, prev };
+}
+
+function catInfo() {
+  const exp = (S.data.dict && S.data.dict.expense) || [], m = {};
+  exp.forEach(c => { m[c.name] = { plan: c.plan || 0, group: c.group || 'Прочее' }; });
+  return { list: exp, map: m };
+}
+
+function opPassesFilters(op) {
+  const B = S.budget;
+  if (op.type !== 'Расход') return false;
+  if (!B.move && op.move) return false;
+  if (B.who !== 'all' && op.who !== B.who) return false;
+  if (B.wallet !== 'all' && op.wallet !== B.wallet) return false;
+  return true;
+}
+
+/** Сколько евро этой траты попадает в период [from, to]. Растянутые на n мес. — по частям, пропорционально дням. */
+function opShare(op, from, to) {
+  const e = opEur(op); if (!e) return 0;
+  const n = op.spread > 1 ? op.spread : 1;
+  if (n === 1) return op.date >= from && op.date <= to ? e : 0;
+  let sum = 0, k = monthKey(op.date);
+  for (let i = 0; i < n; i++, k = shiftMonth(k, 1)) {
+    const ov = overlap(monthStart(k), monthEnd(k), from, to);
+    if (ov) sum += e / n * ov / daysInMonth(k);
+  }
+  return sum;
+}
+
+/** План категории на период: план в месяц × доля дней каждого месяца */
+function planFor(monthly, from, to) {
+  if (!monthly) return 0;
+  let sum = 0, k = monthKey(from);
+  while (k <= monthKey(to)) { sum += monthly * overlap(monthStart(k), monthEnd(k), from, to) / daysInMonth(k); k = shiftMonth(k, 1); }
+  return sum;
+}
+
+function budgetCalc(from, to) {
+  const C = catInfo(), cats = {};
+  C.list.forEach(c => { cats[c.name] = { name: c.name, group: c.group, plan: planFor(c.plan || 0, from, to), fact: 0, ops: [] }; });
+  (S.data.ops || []).forEach(op => {
+    if (!opPassesFilters(op)) return;
+    const v = opShare(op, from, to); if (!v) return;
+    if (!cats[op.cat]) cats[op.cat] = { name: op.cat || 'Без категории', group: 'Прочее', plan: 0, fact: 0, ops: [] };
+    cats[op.cat].fact += v; cats[op.cat].ops.push(op);
+  });
+  const groups = [], gi = {};
+  Object.keys(cats).forEach(n => {
+    const c = cats[n], g = c.group;
+    if (!gi[g]) { gi[g] = { name: g, plan: 0, fact: 0, cats: [] }; groups.push(gi[g]); }
+    gi[g].cats.push(c); gi[g].plan += c.plan; gi[g].fact += c.fact;
+  });
+  const inB = groups.filter(g => g.name !== 'Вне бюджета'), out = gi['Вне бюджета'] || { fact: 0, cats: [] };
+  return { groups: inB, outside: out, cats, plan: inB.reduce((a, g) => a + g.plan, 0), fact: inB.reduce((a, g) => a + g.fact, 0) };
+}
+
+const pctChange = (now, before) => before > 0.5 ? (now / before - 1) * 100 : null;
+function chgTag(now, before) {
+  const p = pctChange(now, before);
+  if (p == null || Math.abs(p) < 1) return '';
+  const up = p > 0;
+  return `<span class="pill" style="background:${up ? 'rgba(255,138,101,.14)' : 'rgba(91,227,166,.14)'};color:${up ? 'var(--exp)' : 'var(--inc)'}">${up ? '▲' : '▼'} ${fmt(Math.abs(p), 0)}%</span>`;
+}
+
+function renderBudget() {
+  const el = $('#s-budget'), B = S.budget, D = S.data;
+  const R0 = budgetRange(), cur = budgetCalc(R0.from, R0.to), prev = budgetCalc(R0.prev.from, R0.prev.to);
+  const plan = cur.plan, spent = cur.fact, diff = spent - plan;
+  const t = todayISO();
+
+  // донат по группам
+  const base = Math.max(spent, plan) || 1, C2 = 2 * Math.PI * 80;
+  let acc = 0;
+  const segs = cur.groups.map((g, i) => {
+    const len = Math.max(0, g.fact / base * C2 - 14), off = -acc - 7; acc += g.fact / base * C2;
+    return g.fact > 0 ? `<circle cx="105" cy="105" r="80" fill="none" stroke="${GROUP_COL[i % GROUP_COL.length]}" stroke-width="20" stroke-linecap="round" style="stroke-dasharray:0 ${C2};stroke-dashoffset:${off};transition:stroke-dasharray 1s ${0.1 + i * 0.08}s cubic-bezier(.2,.8,.2,1)" data-dash="${len} ${C2}"></circle>` : '';
+  }).join('');
+
+  // темп и прогноз — если период идёт сейчас
+  let pace = '';
+  if (R0.from <= t && t <= R0.to && B.period !== 'all') {
+    const passed = daysBetween(R0.from, t), total = daysBetween(R0.from, R0.to);
+    const perDay = spent / passed, forecast = perDay * total, left = plan - spent, daysLeft = total - passed + 1;
+    const bad = forecast > plan * 1.02;
+    pace = `<div class="card" style="gap:10px"><span class="card-t">Темп</span>
+      <div class="between" style="font-size:13px"><span class="muted">Тратите в день</span><span class="num" style="font-weight:600">${fmt(perDay)} €</span></div>
+      <div class="between" style="font-size:13px"><span class="muted">Если так же — к концу периода</span><span class="num" style="font-weight:700;color:${bad ? 'var(--exp)' : 'var(--inc)'}">${fmt(forecast, 0)} €</span></div>
+      ${left > 0 ? `<div class="between" style="font-size:13px"><span class="muted">Чтобы уложиться, можно в день</span><span class="num" style="font-weight:600">${fmt(left / daysLeft)} €</span></div>` : ''}
+      <div class="verdict" style="background:${bad ? 'rgba(255,138,101,.12);color:#FFB199' : 'rgba(91,227,166,.12);color:var(--inc)'}">${bad ? 'По прогнозу выйдете за план на ' + fmt(forecast - plan, 0) + ' €' : 'По прогнозу укладываетесь в план'}</div></div>`;
+  }
+
+  // группы и категории
+  const gHtml = cur.groups.map((g, i) => {
+    const f = g.fact, p = g.plan, over = p ? f > p : f > 0, open = B.open === g.name, col = GROUP_COL[i % GROUP_COL.length];
+    const pg = prev.groups.find(x => x.name === g.name), pf = pg ? pg.fact : 0;
+    const inW = over && p ? (p / f * 100) : (p ? f / p * 100 : (f ? 100 : 0));
+    const cats = g.cats.filter(c => c.fact > 0.004 || c.plan > 0.004).map(c => {
+      const o = c.plan ? c.fact > c.plan : c.fact > 0, pc = prev.cats[c.name] ? prev.cats[c.name].fact : 0;
+      return `<button data-act="openCat" data-v="${esc(c.name)}" class="between" style="width:100%;background:none;border:0;border-top:1px solid var(--line);padding:10px 0;font-size:13px;text-align:left">
+        <span style="flex:1;color:var(--t2)">${esc(c.name)}</span>${chgTag(c.fact, pc)}
+        <span style="font-weight:700;color:${o ? 'var(--exp)' : 'var(--t1)'};margin-left:6px">${fmt(c.fact)} €</span><span style="width:56px;text-align:right" class="muted">${c.plan ? fmt(c.plan, 0) + ' €' : '—'}</span>
+        <span aria-hidden="true" style="color:var(--t3);margin-left:4px">›</span></button>`;
     }).join('');
     return `<div style="background:var(--s1);border:1px solid var(--line);border-radius:20px;overflow:hidden">
       <button data-act="bGroup" data-v="${esc(g.name)}" aria-expanded="${open}" style="width:100%;background:none;border:0;padding:14px 16px;display:flex;flex-direction:column;gap:10px;text-align:left">
         <div class="row" style="width:100%"><span aria-hidden="true" style="width:10px;height:10px;border-radius:5px;background:${col};flex:none"></span>
-          <span style="flex:1;font-size:15px;font-weight:700">${esc(g.name)}</span><span class="num" style="font-weight:600;font-size:13px">${fmt(f)} €</span>
+          <span style="flex:1;font-size:15px;font-weight:700">${esc(g.name)}</span>${chgTag(f, pf)}<span class="num" style="font-weight:600;font-size:13px">${fmt(f)} €</span>
           <span style="font-size:12px" class="muted">/ ${fmt(p, 0)} €</span>
           <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9AA3AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .25s;transform:rotate(${open ? 180 : 0}deg)"><path d="M6 9l6 6 6-6"/></svg></div>
-        <div class="bar" style="width:100%"><i data-w="${inW}" style="background:${col}"></i>${over ? `<i data-w="${100 - inW}" data-l="${inW}" style="background:var(--exp);border-radius:0"></i>` : ''}</div>
+        <div class="bar" style="width:100%"><i data-w="${Math.min(100, inW)}" style="background:${col}"></i>${over && p ? `<i data-w="${100 - inW}" data-l="${inW}" style="background:var(--exp);border-radius:0"></i>` : ''}</div>
         <span style="font-size:12px;font-weight:600;color:${over ? 'var(--exp)' : 'var(--t3)'}">${p ? (over ? 'Сверх плана на ' + fmt(f - p) + ' € · ' : 'Осталось ' + fmt(p - f) + ' € · ') + Math.round(f / p * 100) + '%' : 'Без плана'}</span>
       </button>
-      ${open ? `<div style="padding:0 16px 12px;display:flex;flex-direction:column;animation:rise .3s both">${cats}</div>` : ''}
+      ${open ? `<div style="padding:0 16px 8px;display:flex;flex-direction:column;animation:rise .3s both">${cats || '<span class="muted" style="font-size:13px;padding:8px 0">Трат нет</span>'}</div>` : ''}
     </div>`;
   }).join('');
 
-  const O = B.outside;
-  const oCats = O ? O.cats.filter(c => c.fact[mi]).sort((a, b) => b.fact[mi] - a.fact[mi]) : [];
-  const oMax = oCats.length ? oCats[0].fact[mi] : 1;
-  const inc = B.income || { months: [], rows: [] }, ii = inc.months.indexOf(mLabel);
+  const O = cur.outside, oCats = (O.cats || []).filter(c => c.fact > 0.004).sort((a, b) => b.fact - a.fact), oMax = oCats.length ? oCats[0].fact : 1;
+
+  // итог месяца (доходы) — только когда выбран один месяц
+  const inc = (D.budget && D.budget.income) || { months: [], rows: [] };
+  const lbl = R0.kind === 'month' ? MONTHS_S[+R0.from.slice(5, 7) - 1] + ' ' + R0.from.slice(2, 4) : '';
+  const ii = lbl ? inc.months.indexOf(lbl) : -1;
   const sumRows = ii >= 0 ? inc.rows.map(r => {
     const v = r.vals[ii] || 0, total = /^Всего|минус/.test(r.name), last = /минус/.test(r.name), isInc = /^Доход|Общие доходы|Всего доходов/.test(r.name);
     return `<div class="between" style="font-size:${last ? 15 : 13}px;${total ? 'font-weight:700;padding-top:10px;border-top:1px solid var(--line)' : 'color:var(--t2)'}">
-      <span>${esc(r.name)}</span><span class="num" style="font-weight:600;color:${last ? (v < 0 ? 'var(--exp)' : 'var(--inc)') : isInc ? 'var(--inc)' : 'var(--t1)'}">${v < 0 ? '− ' : ''}${fmt(v)} €</span></div>`;
+      <span>${esc(r.name)}</span><span class="num" style="font-weight:600;color:${last ? (v < 0 ? 'var(--exp)' : 'var(--inc)') : isInc ? 'var(--inc)' : 'var(--t1)'}">${v < 0 ? '− ' : ''}${fmt(v)} €</span></div>`;
   }).join('') : '';
 
+  const months = opMonths();
+  const wallets = (D.wallets || []).map(w => w.name);
+  const filtersOn = B.who !== 'all' || B.wallet !== 'all' || B.move;
+
   el.innerHTML = `
-    <header class="between"><h1 class="h1">Бюджет</h1><span style="font-size:13px" class="muted">план ${fmt(plan, 0)} € в месяц</span></header>
-    <div class="seg" role="group" aria-label="Месяц">${months.map((m, i) => `<button class="${i === mi ? 'on' : ''}" data-act="bMonth" data-v="${i}">${esc(m)}</button>`).join('')}</div>
+    <header class="between"><h1 class="h1">Бюджет</h1><span style="font-size:13px" class="muted">${esc(R0.label)}</span></header>
+    <div class="chips" role="group" aria-label="Период">${[['this', 'Этот месяц'], ['prev', 'Прошлый'], ['month', 'Месяц…'], ['range', 'Свои даты'], ['all', 'Всё время']]
+      .map(x => `<button class="chip ${B.period === x[0] ? 'on' : ''}" data-act="bPeriod" data-v="${x[0]}">${x[1]}</button>`).join('')}</div>
+    ${B.period === 'month' ? `<label class="row" style="height:48px;border-radius:16px;background:var(--s1);border:1px solid var(--line2);padding:0 14px"><span class="muted" style="font-size:13px">Месяц</span>
+      <select id="b-month" style="flex:1;background:none;border:0;color:var(--t1);font-size:14px;font-weight:600;outline:none;text-align:right;color-scheme:dark">${months.map(k => `<option value="${k}" ${k === (B.month || months[0]) ? 'selected' : ''}>${monthLabel(k)}</option>`).join('')}</select></label>` : ''}
+    ${B.period === 'range' ? `<div class="row" style="gap:8px">
+      <label class="row" style="flex:1;height:48px;border-radius:16px;background:var(--s1);border:1px solid var(--line2);padding:0 12px;gap:6px"><span class="muted" style="font-size:12px">с</span><input type="date" id="b-from" value="${esc(R0.from)}" style="flex:1;min-width:0;background:none;border:0;color:var(--t1);font-size:13px;outline:none;color-scheme:dark"></label>
+      <label class="row" style="flex:1;height:48px;border-radius:16px;background:var(--s1);border:1px solid var(--line2);padding:0 12px;gap:6px"><span class="muted" style="font-size:12px">по</span><input type="date" id="b-to" value="${esc(R0.to)}" style="flex:1;min-width:0;background:none;border:0;color:var(--t1);font-size:13px;outline:none;color-scheme:dark"></label></div>` : ''}
+    <details ${filtersOn ? 'open' : ''} style="background:var(--s1);border:1px solid var(--line);border-radius:20px;padding:12px 16px">
+      <summary style="font-size:14px;font-weight:700;cursor:pointer;list-style:none" class="between"><span>Фильтры${filtersOn ? ' · включены' : ''}</span><span class="muted" style="font-size:12px">кто · кошелёк · переезд</span></summary>
+      <div style="display:flex;flex-direction:column;gap:12px;margin-top:12px">
+        <div class="seg soft" role="group" aria-label="Кто">${[['all', 'Все'], ['Общее', 'Общее'], ['Лена', 'Лена'], ['Егор', 'Егор']].map(x => `<button class="${B.who === x[0] ? 'on' : ''}" data-act="bWho" data-v="${x[0]}">${x[1]}</button>`).join('')}</div>
+        <div class="wrap">${[['all', 'Все кошельки']].concat(wallets.map(w => [w, w])).map(x => `<button class="chip sm ${B.wallet === x[0] ? 'on' : ''}" data-act="bWallet" data-v="${esc(x[0])}">${esc(x[1])}</button>`).join('')}</div>
+        <div class="row"><div class="grow"><span style="font-size:14px;font-weight:600">Учитывать переезд</span><span style="font-size:12px" class="muted">Траты с отметкой «Переезд»</span></div>
+          <button class="sw" role="switch" aria-checked="${B.move}" aria-label="Учитывать переезд" data-act="bMove"></button></div>
+      </div>
+    </details>
     <div class="card" style="align-items:center;padding:20px">
       <div style="position:relative;width:210px;height:210px">
         <svg role="img" aria-label="Траты по группам бюджета" width="210" height="210" viewBox="0 0 210 210" style="transform:rotate(-90deg)">
           <circle cx="105" cy="105" r="80" fill="none" stroke="#23272E" stroke-width="20"></circle>${segs}</svg>
         <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px">
           <span style="font-size:12px" class="muted">Потрачено</span><span class="num" style="font-weight:700;font-size:23px">${cnt(spent, 2, ' €')}</span>
-          <span style="font-size:12px" class="muted">из ${fmt(plan, 0)} €</span></div>
+          <span style="font-size:12px" class="muted">план ${fmt(plan, 0)} €</span></div>
       </div>
       <span style="height:32px;padding:0 14px;border-radius:16px;display:flex;align-items:center;font-size:13px;font-weight:700;${diff > 0 ? 'background:rgba(255,138,101,.14);color:var(--exp)' : 'background:rgba(91,227,166,.14);color:var(--inc)'}">${diff > 0 ? 'Перерасход ' + fmt(diff) + ' €' : 'Осталось ' + fmt(-diff) + ' €'}</span>
+      <span style="font-size:12px" class="muted">${prev.fact > 0.5 ? 'За ' + esc(R0.prev.label) + ': ' + fmt(prev.fact) + ' € ' : ''}${chgTag(spent, prev.fact)}</span>
     </div>
-    <div style="display:flex;flex-direction:column;gap:10px"><span class="card-t">Группы · план и факт</span>${gHtml}</div>
-    ${O ? `<div class="card"><div class="between"><span class="card-t">Вне бюджета</span><span class="num" style="font-weight:600;font-size:15px">${fmt(O.fact[mi] || 0)} €</span></div>
+    ${pace}
+    <div style="display:flex;flex-direction:column;gap:10px"><div class="between"><span class="card-t">Группы · план и факт</span><span class="muted" style="font-size:11px">▲▼ — к прошлому периоду</span></div>${gHtml}</div>
+    ${oCats.length ? `<div class="card"><div class="between"><span class="card-t">Вне бюджета</span><span class="num" style="font-weight:600;font-size:15px">${fmt(O.fact)} €</span></div>
       <span style="font-size:12px" class="muted">Поездки, подарки, платежи и налоги в РФ — не входят в план</span>
-      ${oCats.map(c => `<div style="display:flex;flex-direction:column;gap:6px"><div class="between" style="font-size:13px"><span style="color:var(--t2)">${esc(c.name)}</span><span style="font-weight:700">${fmt(c.fact[mi])} €</span></div>
-        <div class="bar" style="height:6px"><i data-w="${c.fact[mi] / oMax * 100}" style="background:#9AA3AF"></i></div></div>`).join('')}</div>` : ''}
-    ${sumRows ? `<div class="card" style="gap:10px"><span class="card-t">Итог месяца</span>${sumRows}</div>` : ''}`;
+      ${oCats.map(c => `<button data-act="openCat" data-v="${esc(c.name)}" style="background:none;border:0;padding:0;text-align:left;display:flex;flex-direction:column;gap:6px"><div class="between" style="font-size:13px;width:100%"><span style="color:var(--t2)">${esc(c.name)} ›</span><span style="font-weight:700">${fmt(c.fact)} €</span></div>
+        <div class="bar" style="height:6px;width:100%"><i data-w="${c.fact / oMax * 100}" style="background:#9AA3AF"></i></div></button>`).join('')}</div>` : ''}
+    ${sumRows && !filtersOn ? `<div class="card" style="gap:10px"><span class="card-t">Итог месяца</span>${sumRows}</div>` : ''}`;
   animate(el);
+  const bm = $('#b-month'); if (bm) bm.addEventListener('change', e => { S.budget.month = e.target.value; renderBudget(); });
+  const bf = $('#b-from'), bt = $('#b-to');
+  if (bf) bf.addEventListener('change', e => { S.budget.from = e.target.value; renderBudget(); });
+  if (bt) bt.addEventListener('change', e => { S.budget.to = e.target.value; renderBudget(); });
 }
+
+/* ---------- Категория: траты за период, поиск, по месяцам ---------- */
+function openCat(name) { S.cat = { name, q: '' }; renderCat(); $('#sh-cat').classList.add('open'); syncBack(); }
+function renderCat() {
+  const name = S.cat.name, R0 = budgetRange(), C = catInfo().map[name] || { plan: 0 };
+  $('#cat-title').textContent = name;
+  const inPeriod = (S.data.ops || []).filter(op => op.cat === name && opPassesFilters(op) && opShare(op, R0.from, R0.to) > 0);
+  const total = inPeriod.reduce((a, op) => a + opShare(op, R0.from, R0.to), 0);
+  const prevTotal = (S.data.ops || []).filter(op => op.cat === name && opPassesFilters(op)).reduce((a, op) => a + opShare(op, R0.prev.from, R0.prev.to), 0);
+  const plan = planFor(C.plan, R0.from, R0.to);
+  // по месяцам: последние 6
+  const cm = monthKey(todayISO()), ks = [];
+  for (let i = 5; i >= 0; i--) ks.push(shiftMonth(cm, -i));
+  const mv = ks.map(k => (S.data.ops || []).filter(op => op.cat === name && opPassesFilters(op)).reduce((a, op) => a + opShare(op, monthStart(k), monthEnd(k)), 0));
+  const mx = Math.max.apply(null, mv.concat([C.plan || 0, 1]));
+  const bars = ks.map((k, i) => `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px">
+      <span style="font-size:10px" class="muted">${mv[i] ? fmt(mv[i], 0) : ''}</span>
+      <div style="width:100%;height:90px;display:flex;align-items:flex-end;position:relative">
+        <div style="width:100%;height:${mv[i] / mx * 100}%;min-height:${mv[i] ? 3 : 0}px;border-radius:6px;background:${C.plan && mv[i] > C.plan ? 'var(--exp)' : 'var(--acc)'}"></div></div>
+      <span style="font-size:11px" class="muted">${MONTHS_S[+k.slice(5) - 1]}</span></div>`).join('');
+  const planLine = C.plan ? `<span style="font-size:11px" class="muted">План ${fmt(C.plan, 0)} € в месяц${mv.some(v => v > C.plan) ? ' · красным — сверх плана' : ''}</span>` : '';
+
+  const body = $('#cat-body');
+  const first = !body.dataset.ready || body.dataset.cat !== name;
+  if (first) {
+    body.dataset.ready = '1'; body.dataset.cat = name;
+    body.innerHTML = `<div id="cat-top"></div>
+      <label class="row" style="height:48px;border-radius:16px;background:var(--s1);border:1px solid var(--line2);padding:0 14px;color:var(--t3)">
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <span class="sr">Поиск по комментарию</span><input type="search" id="cat-q" placeholder="Поиск: ДоДо, Lidl, зал…" style="flex:1;min-width:0;background:transparent;border:0;outline:none;color:var(--t1);font-size:14px"></label>
+      <div id="cat-list"></div>`;
+    $('#cat-q').addEventListener('input', e => { S.cat.q = e.target.value; renderCatList(inPeriod, R0); });
+  }
+  $('#cat-top').innerHTML = `<div class="card" style="gap:10px">
+      <span class="muted" style="font-size:13px">${esc(R0.label)}</span>
+      <div class="between" style="align-items:baseline"><span class="num" style="font-weight:700;font-size:26px">${fmt(total)} €</span>${plan ? `<span class="muted" style="font-size:13px">план ${fmt(plan, 0)} €</span>` : ''}</div>
+      ${plan ? `<div class="bar"><i data-w="${Math.min(100, total / plan * 100)}" style="background:${total > plan ? 'var(--exp)' : 'var(--acc)'}"></i></div>` : ''}
+      <div class="between" style="font-size:12px"><span class="muted">${inPeriod.length} ${plural(inPeriod.length, 'трата', 'траты', 'трат')}</span>
+        <span class="muted">${prevTotal > 0.5 ? 'за ' + esc(R0.prev.label) + ' ' + fmt(prevTotal) + ' € ' : ''}${chgTag(total, prevTotal)}</span></div></div>
+    <div class="card" style="gap:10px"><span class="card-t">По месяцам</span><div class="row" style="align-items:flex-end;gap:8px">${bars}</div>${planLine}</div>`;
+  animate($('#cat-top'));
+  renderCatList(inPeriod, R0);
+}
+function renderCatList(ops, R0) {
+  const q = (S.cat.q || '').trim().toLowerCase();
+  const list = ops.filter(op => !q || ((op.comment || '') + ' ' + op.wallet + ' ' + op.who).toLowerCase().indexOf(q) >= 0);
+  const sum = list.reduce((a, op) => a + opShare(op, R0.from, R0.to), 0);
+  $('#cat-list').innerHTML = (q ? `<div class="between" style="font-size:13px;padding:0 4px 8px"><span class="muted">Найдено ${list.length}</span><span style="font-weight:700">${fmt(sum)} €</span></div>` : '') +
+    (list.length ? `<div class="list">${list.map(opRow).join('')}</div>` : '<div class="muted" style="text-align:center;padding:30px 0;font-size:14px">Ничего не найдено</div>');
+}
+function plural(n, a, b, c) { const m = n % 10, h = n % 100; return m === 1 && h !== 11 ? a : m >= 2 && m <= 4 && (h < 12 || h > 14) ? b : c; }
 
 /* ================= ИЗ РФ ================= */
 function renderRF() {
@@ -598,7 +805,10 @@ function renderRF() {
   const loss = sel.reduce((a, r) => a + (r.lossEur || 0), 0);
   const avg = got ? sent / got : 0, lossShare = got + loss ? loss / (got + loss) : 0;
   const cbNow = R().RUB;
-  const est = cbNow ? S.rf.rub / cbNow * (1 - lossShare) : null;
+  const A = S.data.artsakh && S.data.artsakh.ok ? S.data.artsakh : null;
+  const cardRows = rows.filter(r => r.to === 'Армянская карта' && r.sent && r.got);
+  const cardAvg = cardRows.length ? cardRows.reduce((a, r) => a + r.sent, 0) / cardRows.reduce((a, r) => a + r.got, 0) : 0;
+  const est = A ? S.rf.rub / A.withFee : cbNow ? S.rf.rub / cbNow * (1 - lossShare) : null;
 
   // график
   const pts = rows.filter(r => r.rate && r.cb);
@@ -646,16 +856,16 @@ function renderRF() {
         <div style="background:rgba(255,138,101,.1);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:4px"><span style="font-size:12px;color:#FFB199">Потери на курсе</span><span class="num" style="font-weight:600;font-size:17px;color:var(--exp)">${cnt(loss, 2, ' €')}</span><span style="font-size:11px;color:#FFB199">≈ ${fmt(lossShare * 100, 1)}% от суммы</span></div>
       </div>
     </div>
-    <div class="card">
+    ${A ? artsakhCard(A, est, cardAvg) : `<div class="card">
       <span class="card-t">Если перевести сейчас</span>
+      ${S.data.artsakh && S.data.artsakh.error ? '<div class="err">Не получилось узнать курс Арцахбанка: ' + esc(S.data.artsakh.error) + '. Ниже — оценка по ЦБ.</div>' : ''}
       <label class="row" style="height:56px;padding:0 16px;border-radius:16px;background:var(--bg);border:1px solid var(--line2)">
         <span class="muted" style="font-size:14px">Отправляю</span>
         <input id="rf-rub" inputmode="decimal" value="${esc(S.rf.rub)}" style="flex:1;min-width:0;background:none;border:0;outline:none;text-align:right;font-family:Unbounded;font-size:18px;color:var(--t1)">
         <span style="font-weight:700" class="muted">₽</span></label>
       <div class="between"><span class="muted" style="font-size:13px">По курсу ЦБ ${cbNow ? fmt(cbNow, 2) + ' ₽' : ''}</span><span class="num" style="font-weight:600" id="rf-cb">${cbNow ? fmt(S.rf.rub / cbNow) + ' €' : '—'}</span></div>
       <div class="between"><span style="font-size:13px;font-weight:700">С вашей обычной потерей ${fmt(lossShare * 100, 1)}%</span><span class="num" style="font-weight:700;color:var(--acc);font-size:16px" id="rf-est">${est != null ? '≈ ' + fmt(est) + ' €' : '—'}</span></div>
-      ${cbNow && avg ? `<div class="verdict" style="background:${cbNow < avg ? 'rgba(91,227,166,.12);color:var(--inc)' : 'rgba(255,138,101,.12);color:#FFB199'}">${cbNow < avg ? 'Евро сейчас дешевле, чем в среднем по вашим переводам: ЦБ ' + fmt(cbNow, 2) + ' ₽ против ваших ' + fmt(avg, 2) + ' ₽.' : 'Евро сейчас дороже вашего среднего курса: ЦБ ' + fmt(cbNow, 2) + ' ₽ против ' + fmt(avg, 2) + ' ₽.'}</div>` : ''}
-    </div>
+    </div>`}
     ${chart ? `<div class="card"><div class="between"><span class="card-t">Курс: наш и ЦБ</span>
       <div class="row" style="gap:12px;font-size:12px;color:var(--t3)"><span class="row" style="gap:5px"><span aria-hidden="true" style="width:12px;height:3px;border-radius:2px;background:var(--exp)"></span>Наш</span>
       <span class="row" style="gap:5px"><span aria-hidden="true" style="width:12px;height:3px;border-radius:2px;background:var(--acc)"></span>ЦБ</span></div></div>
@@ -667,9 +877,45 @@ function renderRF() {
   $('#rf-rub').addEventListener('input', e => {
     const v = parseFloat(e.target.value.replace(',', '.').replace(/\s/g, '')) || 0;
     S.rf.rub = v;
-    $('#rf-cb').textContent = cbNow ? fmt(v / cbNow) + ' €' : '—';
-    $('#rf-est').textContent = cbNow ? '≈ ' + fmt(v / cbNow * (1 - lossShare)) + ' €' : '—';
+    if (A) {
+      $('#rf-est').textContent = '≈ ' + fmt(v / A.withFee) + ' €';
+      $('#rf-nofee').textContent = fmt(v / A.rate) + ' €';
+    } else {
+      $('#rf-cb').textContent = cbNow ? fmt(v / cbNow) + ' €' : '—';
+      $('#rf-est').textContent = cbNow ? '≈ ' + fmt(v / cbNow * (1 - lossShare)) + ' €' : '—';
+    }
   });
+}
+
+/** Блок «Если перевести сейчас» по курсу Арцахбанка: зелёный / жёлтый / красный */
+function artsakhCard(A, est, cardAvg) {
+  const Z = {
+    green: ['rgba(91,227,166,.12)', 'var(--inc)', '🟢 Выгодно — хорошее время пополнить карту'],
+    yellow: ['rgba(245,194,107,.13)', 'var(--amb)', '🟡 Средне — пополнить можно, но выгода небольшая'],
+    red: ['rgba(255,138,101,.13)', '#FFB199', '🔴 Невыгодно — если можно подождать, транш лучше отложить'],
+  }[A.zone];
+  const vsAvg = cardAvg ? (A.withFee / cardAvg - 1) * 100 : null;
+  const pos = Math.max(0, Math.min(100, (A.rate - (A.good - 6)) / ((A.bad + 6) - (A.good - 6)) * 100));
+  const g = (A.good - (A.good - 6)) / ((A.bad + 6) - (A.good - 6)) * 100, b = (A.bad - (A.good - 6)) / ((A.bad + 6) - (A.good - 6)) * 100;
+  return `<div class="card" style="gap:14px">
+      <div class="between"><span class="card-t">Если перевести сейчас</span><button class="link" data-act="rateRefresh">Обновить курс</button></div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <span class="muted" style="font-size:12px">Курс Арцахбанка: рубли → евро</span>
+        <div class="row" style="align-items:baseline;gap:8px"><span class="num" style="font-weight:700;font-size:28px;color:${Z[1]}">${fmt(A.rate, 2)} ₽</span><span class="muted" style="font-size:13px">за 1 €</span></div>
+        <span class="muted" style="font-size:12px">€ ${fmt(A.eurSell, 0)} драм ÷ ₽ ${fmt(A.rubBuy, 2)} драм${A.updated ? ' · обновлено ' + esc(A.updated) : ''}</span>
+      </div>
+      <div role="img" aria-label="Шкала: до ${A.good} выгодно, ${A.good}–${A.bad} средне, от ${A.bad} невыгодно" style="position:relative;height:10px;border-radius:5px;background:linear-gradient(to right,var(--inc) 0 ${g}%,var(--amb) ${g}% ${b}%,var(--exp) ${b}% 100%)">
+        <span style="position:absolute;top:-5px;left:calc(${pos}% - 10px);width:20px;height:20px;border-radius:10px;background:var(--t1);border:4px solid var(--bg)"></span></div>
+      <div class="between" style="font-size:11px;margin-top:-6px" aria-hidden="true"><span class="muted">выгодно &lt; ${A.good}</span><span class="muted">${A.good}–${A.bad}</span><span class="muted">${A.bad} &gt; невыгодно</span></div>
+      <div class="verdict" style="background:${Z[0]};color:${Z[1]}">${Z[2]}</div>
+      <label class="row" style="height:56px;padding:0 16px;border-radius:16px;background:var(--bg);border:1px solid var(--line2)">
+        <span class="muted" style="font-size:14px">Отправляю</span>
+        <input id="rf-rub" inputmode="decimal" value="${esc(S.rf.rub)}" style="flex:1;min-width:0;background:none;border:0;outline:none;text-align:right;font-family:Unbounded;font-size:18px;color:var(--t1)">
+        <span style="font-weight:700" class="muted">₽</span></label>
+      <div class="between"><span class="muted" style="font-size:13px">По курсу банка</span><span class="num" style="font-weight:600" id="rf-nofee">${fmt(S.rf.rub / A.rate)} €</span></div>
+      <div class="between"><span style="font-size:13px;font-weight:700">С комиссией Т-Банка ${fmt(A.fee * 100, 1)}%</span><span class="num" style="font-weight:700;color:var(--acc);font-size:16px" id="rf-est">≈ ${fmt(est)} €</span></div>
+      ${vsAvg != null ? `<span class="muted" style="font-size:12px">Ваш средний курс по прошлым пополнениям карты — ${fmt(cardAvg, 2)} ₽. Сейчас ${vsAvg < 0 ? 'на ' + fmt(-vsAvg, 1) + '% выгоднее' : 'на ' + fmt(vsAvg, 1) + '% дороже'}.</span>` : ''}
+    </div>`;
 }
 
 /* ================= НОВАЯ ОПЕРАЦИЯ ================= */
@@ -879,8 +1125,14 @@ document.addEventListener('click', e => {
     case 'opsType': S.ops.type = v; S.ops.limit = 60; renderOps(); haptic(); break;
     case 'opsWho': S.ops.who = v; S.ops.limit = 60; renderOps(); haptic(); break;
     case 'more': S.ops.limit += 60; renderOps(); break;
-    case 'bMonth': S.budget.m = +v; renderBudget(); haptic(); break;
+    case 'bPeriod': S.budget.period = v; if (v === 'month' && !S.budget.month) S.budget.month = opMonths()[0]; renderBudget(); haptic(); break;
+    case 'bWho': S.budget.who = v; renderBudget(); haptic(); break;
+    case 'bWallet': S.budget.wallet = v; renderBudget(); haptic(); break;
+    case 'bMove': S.budget.move = !S.budget.move; renderBudget(); haptic(); break;
     case 'bGroup': S.budget.open = S.budget.open === v ? null : v; renderBudget(); haptic(); break;
+    case 'openCat': openCat(v); haptic(); break;
+    case 'rateRefresh': rateRefresh(); break;
+    case 'closeCat': $('#sh-cat').classList.remove('open'); syncBack(); break;
     case 'rfWho': S.rf.who = v; renderRF(); haptic(); break;
     case 'openAdd': openAdd(); haptic(); break;
     case 'closeAdd': closeAdd(); break;
@@ -898,6 +1150,13 @@ document.addEventListener('click', e => {
     case 'save': saveAdd(); break;
   }
 });
+
+async function rateRefresh() {
+  try {
+    if (!DEMO) { const j = await api('rates'); S.rates = j.rates; S.data.artsakh = j.artsakh; }
+    renderRF(); toast(S.data.artsakh && S.data.artsakh.ok ? 'Курс обновлён' : 'Курс банка сейчас недоступен'); haptic('ok');
+  } catch (e) { toast('Ошибка: ' + e.message); haptic('err'); }
+}
 
 async function refresh() {
   const ic = $('#ref-ic'); if (ic) ic.style.animation = 'spin .9s linear infinite';
@@ -952,7 +1211,8 @@ function demoData() {
       { date: d(40), who: 'Общее', from: 'Общий счёт РФ', sent: 100000, to: 'Армянская карта', got: 960, cur: 'EUR', rate: 104.17, cb: 100.1, lossPct: 0.039, lossEur: 39, gotEur: 960 },
       { date: d(25), who: 'Егор', from: 'Карты РФ — Егор', sent: 50000, to: 'Армянская карта', got: 490, cur: 'EUR', rate: 102.04, cb: 98.2, lossPct: 0.038, lossEur: 19, gotEur: 490 },
       { date: d(10), who: 'Лена', from: 'Карты РФ — Лена', sent: 50000, to: 'Армянская карта', got: 505, cur: 'EUR', rate: 99.0, cb: 95.0, lossPct: 0.04, lossEur: 21, gotEur: 505 }] },
-    dict: { expense: exp, income: ['Работа / ИП', 'Преподавание танцев', 'Прочий доход'] }
+    dict: { expense: exp, income: ['Работа / ИП', 'Преподавание танцев', 'Прочий доход'] },
+    artsakh: { ok: true, rate: 95.37, withFee: 95.85, eurSell: 412, rubBuy: 4.32, fee: 0.005, good: 98, bad: 102, zone: 'green', updated: '23 окт., 18:00' }
   };
 }
 function demoApply(op, sign) {
